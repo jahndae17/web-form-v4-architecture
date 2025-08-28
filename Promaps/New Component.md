@@ -13,6 +13,13 @@
 📝 Updates Context (component states)
     ↓
 ⚡ Event Handler (applies locks & calls functions)
+    ↓ ┌─────────────────────────────────────────┐
+    ↓ │ 🎨 Graphics Handler (visual operations) │
+    ↓ │ • Animations & transitions             │
+    ↓ │ • Style coordination                   │
+    ↓ │ • Z-index management                   │
+    ↓ │ • Performance optimization             │
+    ↓ └─────────────────────────────────────────┘
     ↓
 📝 Updates Context (operation states)
     ↓
@@ -33,9 +40,9 @@ MyComponent/
 
 | **File** | **Contains** | **Does NOT Contain** | **Communicates With**|
 |----------|--------------|---------------------|-----------------------|
-| `Component.js` | • Data properties<br>• Structure<br>• State getters/setters | • Event listeners<br>• User input handling<br>• Function calls |Interface Handler|
-| `Behavior.js` | • Function declarations<br>• Input trigger mappings<br>• Behavior schema | • Event listeners<br>• Direct function calls<br>• DOM manipulation |Event Handler|
-| `Styles.css` | • Visual appearance<br>• Animations<br>• States (hover, active) | • JavaScript<br>• Event handling<br>• Behavior logic |Index.html|
+| `Component.js` | • Data properties<br>• Structure<br>• State getters/setters | • Event listeners<br>• User input handling<br>• Function calls<br>• Visual operations |Interface Handler|
+| `Behavior.js` | • Function declarations<br>• Input trigger mappings<br>• Behavior schema<br>• Graphics requests | • Event listeners<br>• Direct function calls<br>• DOM manipulation<br>• Direct animations |Event Handler|
+| `Styles.css` | • Base visual appearance<br>• Static CSS rules<br>• CSS custom properties | • JavaScript<br>• Event handling<br>• Dynamic animations<br>• Z-index management |Index.html|
 
 ## 📋 Behavior Schema Registration
 
@@ -58,11 +65,27 @@ const behaviorSchema = {
     "enabled": true,
     "triggers": ["Delete", "right_click+delete"],
     "parameters": { "confirm": true }
+  },
+  "animateHighlight": {
+    "enabled": true,
+    "triggers": ["focus", "validation_error"],
+    "parameters": { 
+      "duration": 300,
+      "graphics_handler": true  // Handled by Graphics Handler
+    }
   }
 };
 ```
 
 ## 🚫 What Components DON'T Do
+
+### ❌ NO Direct Visual Operations
+```javascript
+// ❌ WRONG - Don't handle graphics directly in components
+element.style.transform = 'translateX(100px)';
+element.animate({ opacity: 0 }, 300);
+element.style.zIndex = 1000;
+```
 
 ### ❌ NO Event Listeners in Components
 ```javascript
@@ -102,17 +125,38 @@ class MyComponent {
 }
 ```
 
-### ✅ Behavior Declarations
+### ✅ Graphics Integration
 ```javascript
-// ✅ CORRECT - Behaviors declare what they can do
+// ✅ CORRECT - Request graphics operations through Event Handler
 class MyBehavior {
-  // Declare functions (but Event Handler calls them)
-  editText(parameters) { /* Implementation */ }
-  saveChanges(parameters) { /* Implementation */ }
-  deleteComponent(parameters) { /* Implementation */ }
+  editText(parameters) { 
+    // Business logic here
+    
+    // Request animation through Event Handler → Graphics Handler
+    return {
+      success: true,
+      graphics_request: {
+        type: 'animation',
+        componentId: parameters.target,
+        animation: { highlight: true },
+        duration: 300
+      }
+    };
+  }
   
-  // Register with Event Handler
-  getSchema() { return behaviorSchema; }
+  saveChanges(parameters) { 
+    // Save logic here
+    
+    // Request style update through Event Handler → Graphics Handler  
+    return {
+      success: true,
+      graphics_request: {
+        type: 'style_update',
+        componentId: parameters.target,
+        styles: { border: '2px solid green' }
+      }
+    };
+  }
 }
 ```
 
@@ -125,7 +169,11 @@ class MyBehavior {
 5. **Event Handler** finds that "click" triggers "editText" function
 6. **Event Handler** acquires any needed locks
 7. **Event Handler** calls the "editText" function
-8. **Component updates** its data and re-renders
+8. **Behavior** returns result with optional graphics_request
+9. **Event Handler** sends graphics_request to **Graphics Handler**
+10. **Graphics Handler** executes animations/styles/z-index operations
+11. **Component updates** its data and re-renders
+12. **ChangeLog** records all state changes for coordination
 
 ## 📞 Communication Summary
 
@@ -137,12 +185,76 @@ User Clicks Component
 ↓
 Event Handler: "Click detected, calling editText function"
 ↓
-Component: "editText function executed, updating display"
+Component: "editText function executed, requesting highlight animation"
+↓
+Event Handler: "Got animation request, sending to Graphics Handler"
+↓
+Graphics Handler: "Animation request received, executing highlight effect"
+↓
+ChangeLog: "Recording animation state and component update"
 ```
 
-## 🎯 The Golden Rule
+## 🎨 Graphics Handler Integration
+
+### Visual Operations Hierarchy
+```
+🎨 Graphics Handler manages:
+├── 🎬 Animations (smooth transitions, effects)
+├── 🎨 Dynamic Styles (runtime style changes)  
+├── 📚 Z-Index Coordination (layering conflicts)
+├── 📐 Layout Updates (responsive changes)
+└── ⚡ Performance Optimization (60fps, batching)
+
+🎯 Event Handler coordinates:
+├── 🔒 Permission Model (when graphics operations happen)
+├── 📊 Resource Management (conflicts, locks)
+├── 🔄 Request Routing (behavior → graphics)
+└── 📝 State Synchronization (ChangeLog updates)
+
+💻 Components provide:
+├── 📋 Data Structure (what needs visual updates)
+├── 🎯 Behavior Schema (what graphics are needed)
+├── 🔗 Element References (what gets animated)
+└── 📊 State Information (current visual state)
+```
+
+### Graphics Request Format
+```javascript
+// From Behavior functions return:
+{
+  success: true,
+  graphics_request: {
+    type: 'animation',          // animation | style_update | z_index
+    componentId: 'my-panel',    // Target element
+    animation: {                // Animation properties
+      width: { from: '200px', to: '0px' },
+      duration: 300,
+      easing: 'ease-in-out'
+    },
+    options: {
+      priority: 'high',         // high | normal | low
+      batch: true,              // Batch with other updates
+      onComplete: 'hide_panel'  // Optional callback behavior
+    }
+  }
+}
+```
+
+## 🎯 The Golden Rules
 
 **Components are REACTIVE, not PROACTIVE**
 - Components declare what they CAN do
 - Event Handler decides WHEN to do it
 - No component ever handles its own events
+
+**Graphics are COORDINATED, not DIRECT**
+- Components request visual operations through Event Handler
+- Graphics Handler executes all visual operations
+- No component directly manipulates styles, animations, or z-index
+- All visual state changes flow through the centralized graphics system
+
+**State is CENTRALIZED, not SCATTERED**
+- ChangeLog maintains all system state
+- Handlers coordinate through shared context
+- Components update data, Graphics Handler updates visuals
+- No component maintains its own isolated visual state
