@@ -218,7 +218,7 @@ class ToolPanelToggleBehavior {
     // PANEL TOGGLE FUNCTIONS (Called by Event Handler)
     // ========================
 
-    togglePanel(parameters = {}) {
+    async togglePanel(parameters = {}) {
         if (!this.hostContainer) {
             console.warn('ToolPanelToggleBehavior: No host container attached');
             return {
@@ -252,12 +252,21 @@ class ToolPanelToggleBehavior {
 
             console.log(`🎛️ Toggling panel: ${currentState ? 'open' : 'closed'} → ${targetState ? 'open' : 'closed'}`);
 
-            // Call appropriate container method
-            if (targetState) {
-                this.hostContainer.openPanel();
-            } else {
+            // Get graphics request from container method
+            const panelGraphicsRequest = targetState ? 
+                this.hostContainer.openPanel() : 
                 this.hostContainer.closePanel();
+
+            // Execute panel graphics request via Graphics Handler
+            if (panelGraphicsRequest && this.graphicsHandler) {
+                const panelResult = await this.graphicsHandler.executeRequest(panelGraphicsRequest);
+                console.log('🎛️ Panel animation result:', panelResult);
             }
+
+            // Update button position after panel animation
+            this.updateButtonAfterToggle(targetState, this.getExpectedDimensions(targetState));
+
+            console.log('🎛️ Panel toggle successful');
 
             // Persist state if enabled
             if (this.config.persistState && parameters.persist !== false) {

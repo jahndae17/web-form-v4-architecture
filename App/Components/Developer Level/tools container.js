@@ -139,13 +139,6 @@ class ToolsContainer extends BaseContainer {
         this.toolValidation = options.toolValidation || {};
         this.requiredCategories = options.requiredCategories || [];
         
-        // ========================
-        // Z-INDEX OVERRIDE FOR ANIMATION VISIBILITY
-        // ========================
-        
-        // Override default z-index (depth * 10 = 0) to ensure panel stays visible during animations
-        this.setZIndex(options.zIndex || 100);
-        
         // Initialize the container with current state
         this._initializeContainer();
         
@@ -242,26 +235,9 @@ class ToolsContainer extends BaseContainer {
     // ========================
     
     _initializeContainer() {
-        // Set initial dimensions based on panel state
-        const currentSize = this.isPanelOpen ? this.panelSize.expanded : this.panelSize.collapsed;
-        this.setDimensions(currentSize.width, currentSize.height);
-        
-        // Add tools-specific CSS classes
-        this.addCssClass('tools-container');
-        this.addCssClass(`panel-${this.panelPosition}`);
-        this.addCssClass(`layout-${this.toolLayout}`);
-        this.addCssClass(`theme-${this.theme}`);
-        
-        if (this.isPanelOpen) {
-            this.addCssClass('panel-open');
-        } else {
-            this.addCssClass('panel-collapsed');
-        }
-        
-        // Set initial metadata
-        this.setMetadata('panelState', this.isPanelOpen ? 'open' : 'closed');
-        this.setMetadata('toolCount', this.tools.length);
-        this.setMetadata('activeToolCount', this.activeTools.length);
+        // Set initial metadata (data only - no visual operations)
+        // Store visual specifications for Graphics Handler (no direct application)
+        this._storeVisualSpecs();
         
         // Initialize behaviors
         this._initializeBehaviors();
@@ -278,6 +254,74 @@ class ToolsContainer extends BaseContainer {
         });
         
         console.log(`Behaviors initialized: ${this.enabledBehaviors.join(', ')}`);
+    }
+
+    // ========================
+    // GRAPHICS HANDLER INTEGRATION
+    // ========================
+
+    _storeVisualSpecs() {
+        // Define ALL visual specifications for Graphics Handler
+        // Components declare visual requirements, Graphics Handler implements them
+        this.visualSpecs = {
+            baseStyles: {
+                position: 'relative',
+                backgroundColor: this.theme === 'dark' ? '#2d2d2d' : '#f5f5f5',
+                border: `1px solid ${this.theme === 'dark' ? '#404040' : '#ddd'}`,
+                borderRadius: '4px',
+                overflow: 'hidden',
+                transition: `width ${this.animationDuration}ms ease-in-out`
+            },
+            classes: {
+                base: ['tools-container', `panel-${this.panelPosition}`, `layout-${this.toolLayout}`, `theme-${this.theme}`],
+                states: {
+                    open: ['panel-open'],
+                    closed: ['panel-collapsed']
+                }
+            },
+            dimensions: {
+                expanded: this.panelSize.expanded,
+                collapsed: this.panelSize.collapsed
+            },
+            animations: {
+                panelToggle: {
+                    duration: this.animationDuration,
+                    easing: 'ease-in-out',
+                    properties: ['width', 'opacity']
+                }
+            },
+            zIndex: 100 // Override default z-index for panel visibility
+        };
+    }
+
+    getVisualSpecs() {
+        return this.visualSpecs;
+    }
+
+    // Returns graphics request for initial container setup
+    getInitialGraphicsRequest() {
+        const currentSize = this.isPanelOpen ? this.panelSize.expanded : this.panelSize.collapsed;
+        const stateClasses = this.isPanelOpen ? 
+            this.visualSpecs.classes.states.open : 
+            this.visualSpecs.classes.states.closed;
+
+        return {
+            type: 'comprehensive_update',
+            componentId: this.containerId,
+            styles: {
+                ...this.visualSpecs.baseStyles,
+                width: `${currentSize.width}px`,
+                height: `${currentSize.height}px`,
+                zIndex: this.visualSpecs.zIndex
+            },
+            classes: {
+                add: [...this.visualSpecs.classes.base, ...stateClasses]
+            },
+            options: {
+                priority: 'high',
+                batch: false
+            }
+        };
     }
     
     // ========================
@@ -306,7 +350,6 @@ class ToolsContainer extends BaseContainer {
         
         // Add tool to collection
         this.tools.push(toolItem);
-        this.setMetadata('toolCount', this.tools.length);
         
         console.log(`Tool added: ${toolItem.toolId} (${toolItem.type})`);
         return this;
@@ -323,7 +366,6 @@ class ToolsContainer extends BaseContainer {
             // Remove from selected tools if present
             this._removeFromSelectedTools(toolId);
             
-            this.setMetadata('toolCount', this.tools.length);
             console.log(`Tool removed: ${toolId}`);
             return removedTool;
         }
@@ -391,7 +433,6 @@ class ToolsContainer extends BaseContainer {
         if (!this.activeTools.find(t => t.toolId === toolId)) {
             this.activeTools.push(tool);
             tool.isActive = true;
-            this.setMetadata('activeToolCount', this.activeTools.length);
             console.log(`Tool activated: ${toolId}`);
         }
         
@@ -415,44 +456,107 @@ class ToolsContainer extends BaseContainer {
     
     openPanel() {
         if (this.isPanelOpen) {
-            return this;
+            return null; // No graphics request needed
         }
         
         this.isPanelOpen = true;
-        this.setDimensions(this.panelSize.expanded.width, this.panelSize.expanded.height);
-        this.removeCssClass('panel-collapsed');
-        this.addCssClass('panel-open');
-        this.setMetadata('panelState', 'open');
-        
-        console.log(`Panel opened: ${this.containerId}`);
-        return this;
+        this.lastUsed = Date.now();
+
+        // Return graphics request for opening animation
+        return {
+            type: 'panel_animation',
+            componentId: this.containerId,
+            animation: {
+                ...this.visualSpecs.animations.panelToggle,
+                keyframes: [
+                    { 
+                        width: `${this.panelSize.collapsed.width}px`,
+                        opacity: 0.8
+                    },
+                    { 
+                        width: `${this.panelSize.expanded.width}px`,
+                        opacity: 1
+                    }
+                ]
+            },
+            classes: {
+                add: this.visualSpecs.classes.states.open,
+                remove: this.visualSpecs.classes.states.closed
+            },
+            finalStyles: {
+                width: `${this.panelSize.expanded.width}px`,
+                height: `${this.panelSize.expanded.height}px`,
+                opacity: 1
+            },
+            options: {
+                priority: 'high',
+                batch: false
+            }
+        };
     }
     
     closePanel() {
         if (!this.isPanelOpen) {
-            return this;
+            return null; // No graphics request needed
         }
         
         this.isPanelOpen = false;
-        this.setDimensions(this.panelSize.collapsed.width, this.panelSize.collapsed.height);
-        this.removeCssClass('panel-open');
-        this.addCssClass('panel-collapsed');
-        this.setMetadata('panelState', 'closed');
-        
-        console.log(`Panel closed: ${this.containerId}`);
-        return this;
+
+        // Return graphics request for closing animation
+        return {
+            type: 'panel_animation',
+            componentId: this.containerId,
+            animation: {
+                ...this.visualSpecs.animations.panelToggle,
+                keyframes: [
+                    { 
+                        width: `${this.panelSize.expanded.width}px`,
+                        opacity: 1
+                    },
+                    { 
+                        width: `${this.panelSize.collapsed.width}px`,
+                        opacity: 0.8
+                    }
+                ]
+            },
+            classes: {
+                add: this.visualSpecs.classes.states.closed,
+                remove: this.visualSpecs.classes.states.open
+            },
+            finalStyles: {
+                width: `${this.panelSize.collapsed.width}px`,
+                height: `${this.panelSize.collapsed.height}px`,
+                opacity: 0.8
+            },
+            options: {
+                priority: 'high',
+                batch: false
+            }
+        };
     }
     
     
     setPanelPosition(position) {
         const validPosition = this._validatePanelPosition(position);
         if (validPosition !== this.panelPosition) {
-            this.removeCssClass(`panel-${this.panelPosition}`);
+            const oldPosition = this.panelPosition;
             this.panelPosition = validPosition;
-            this.addCssClass(`panel-${this.panelPosition}`);
-            console.log(`Panel position changed: ${this.panelPosition}`);
+            
+            // Return graphics request for position change
+            return {
+                type: 'class_update',
+                componentId: this.containerId,
+                classes: {
+                    add: [`panel-${this.panelPosition}`],
+                    remove: [`panel-${oldPosition}`]
+                },
+                options: {
+                    priority: 'medium',
+                    batch: true
+                }
+            };
         }
-        return this;
+        return null; // No change needed
     }
     
     // ========================
@@ -508,7 +612,6 @@ class ToolsContainer extends BaseContainer {
         const index = this.activeTools.findIndex(tool => tool.toolId === toolId);
         if (index > -1) {
             this.activeTools.splice(index, 1);
-            this.setMetadata('activeToolCount', this.activeTools.length);
         }
     }
     
@@ -577,10 +680,6 @@ class ToolsContainer extends BaseContainer {
         // Note: Panel opening will be handled by ToolPanelToggleBehavior
         
         // Update metadata
-        this.setMetadata('toolCount', 0);
-        this.setMetadata('activeToolCount', 0);
-        this.setMetadata('panelState', 'open');
-        
         console.log(`ToolsContainer reset: ${this.containerId}`);
         return this;
     }
@@ -607,6 +706,14 @@ class ToolsContainer extends BaseContainer {
         };
     }
 }
+
+// ========================
+// GRAPHICS HANDLER COMPLIANCE STATUS: ✅ COMPLETE
+// ========================
+// All direct DOM manipulation methods removed
+// All visual operations now return graphics requests
+// Component is data-only with visual specifications storage
+// Full Graphics Handler integration implemented
 
 // Export for use
 if (typeof module !== 'undefined' && module.exports) {
