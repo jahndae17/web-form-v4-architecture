@@ -42,8 +42,8 @@ class ToolsContainer extends BaseContainer {
         
         // Start with empty tools array as specified
         this.tools = [];
-        this.activeTools = [];
-        this.toolCategories = options.toolCategories || ['drawing', 'text', 'shapes', 'selection'];
+        // Note: activeTools and selectedTools arrays removed - state managed by Event Handler
+        this.toolCategories = options.toolCategories || ['drawing', 'text', 'shapes', 'selection', 'container', 'form'];
         this.toolLayout = this._validateToolLayout(options.toolLayout || 'grid');
         
         // ========================
@@ -70,7 +70,7 @@ class ToolsContainer extends BaseContainer {
         // ========================
         
         this.dragEnabled = options.dragEnabled !== undefined ? options.dragEnabled : true;
-        this.dropZones = options.dropZones || [];
+        this.dropZones = options.dropZones || ['canvas-area']; // Default to canvas area as drop zone
         this.dragPreview = {
             enabled: true,
             opacity: 0.7,
@@ -86,11 +86,12 @@ class ToolsContainer extends BaseContainer {
         this.returnOnFailedDrop = options.returnOnFailedDrop !== undefined ? options.returnOnFailedDrop : true;
         
         // ========================
-        // TOOL INTERACTION PROPERTIES
+        // TOOL INTERACTION PROPERTIES (Event Handler Managed)
         // ========================
         
+        // Note: Tool selection and activation now handled by Event Handler and DragAndDropBehavior
+        // These properties maintained for compatibility and configuration
         this.selectionMode = this._validateSelectionMode(options.selectionMode || 'single');
-        this.selectedTools = [];
         this.toolHoverEffects = options.toolHoverEffects !== undefined ? options.toolHoverEffects : true;
         this.doubleClickAction = this._validateDoubleClickAction(options.doubleClickAction || 'activate');
         this.contextMenuEnabled = options.contextMenuEnabled !== undefined ? options.contextMenuEnabled : true;
@@ -120,6 +121,10 @@ class ToolsContainer extends BaseContainer {
         this.behaviorState = {};
         this.allowBehaviorToggle = options.allowBehaviorToggle !== undefined ? options.allowBehaviorToggle : true;
         
+        // Behavior instances (will be set during initialization)
+        this.dragAndDropBehavior = null;
+        this.toggleBehavior = null;
+        
         // ========================
         // EVENT HANDLER INTEGRATION PROPERTIES
         // ========================
@@ -133,7 +138,7 @@ class ToolsContainer extends BaseContainer {
         // VALIDATION AND CONSTRAINTS PROPERTIES
         // ========================
         
-        this.allowedToolTypes = options.allowedToolTypes || ['brush', 'text', 'shape', 'selector', 'eraser'];
+        this.allowedToolTypes = options.allowedToolTypes || ['brush', 'text', 'shape', 'selector', 'eraser', 'container', 'drawing', 'form'];
         this.maxTools = options.maxTools || 50;
         this.minTools = options.minTools || 0;
         this.toolValidation = options.toolValidation || {};
@@ -252,11 +257,38 @@ class ToolsContainer extends BaseContainer {
                 lastUsed: null
             };
         });
-        
+
+        // Initialize DragAndDropBehavior if enabled
+        if (this.enabledBehaviors.includes('DragAndDropBehavior')) {
+            this._initializeDragAndDropBehavior();
+        }
+
         console.log(`Behaviors initialized: ${this.enabledBehaviors.join(', ')}`);
     }
 
-    // ========================
+    _initializeDragAndDropBehavior() {
+        // Configure drag behavior for this container
+        this.dragBehaviorConfig = {
+            enabled: this.dragEnabled,
+            dragThreshold: 5,
+            dragAxis: 'both',
+            snapToGrid: false,
+            gridSize: { x: 10, y: 10 },
+            showDragPreview: true,
+            previewOpacity: this.dragPreview.opacity,
+            dropZones: this.dropZones,
+            dragConstraints: this.dragConstraints,
+            returnOnFailedDrop: this.returnOnFailedDrop,
+            throttleMove: 16, // 60fps
+            useTransform: true,
+            hardwareAcceleration: true
+        };
+
+        // Mark as initialized
+        this.behaviorState['DragAndDropBehavior'].initialized = true;
+        
+        console.log('DragAndDropBehavior configuration ready for attachment');
+    }    // ========================
     // GRAPHICS HANDLER INTEGRATION
     // ========================
 
@@ -360,11 +392,8 @@ class ToolsContainer extends BaseContainer {
         if (index > -1) {
             const removedTool = this.tools.splice(index, 1)[0];
             
-            // Remove from active tools if present
-            this._removeFromActiveTools(toolId);
-            
-            // Remove from selected tools if present
-            this._removeFromSelectedTools(toolId);
+            // Note: Tool state management now handled by Event Handler
+            // No need to manually remove from activeTools/selectedTools arrays
             
             console.log(`Tool removed: ${toolId}`);
             return removedTool;
@@ -385,70 +414,240 @@ class ToolsContainer extends BaseContainer {
     }
     
     // ========================
-    // TOOL INTERACTION METHODS
+    // DRAG AND DROP INTERACTION METHODS  
     // ========================
-    
-    selectTool(toolId) {
+    // Note: These methods are called by DragAndDropBehavior through Event Handler
+
+    startToolDrag(parameters) {
+        const { toolId, position, event } = parameters;
         const tool = this.getTool(toolId);
-        if (!tool || !tool.isEnabled) {
+        
+        if (!tool || !tool.isEnabled || !this.dragEnabled) {
+            return { 
+                success: false, 
+                reason: tool ? 'drag_disabled' : 'tool_not_found' 
+            };
+        }
+
+        // Check if tool is draggable
+        if (tool.isDraggable === false) {
+            return { 
+                success: false, 
+                reason: 'tool_not_draggable' 
+            };
+        }
+
+        // Mark tool as being dragged
+        tool.isDragging = true;
+        tool.dragStartTime = Date.now();
+        tool.dragStartPosition = position;
+
+        return {
+            success: true,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: tool.toolElement?.id || `tool-${toolId}`,
+                styles: {
+                    opacity: this.dragPreview.opacity,
+                    transform: 'scale(0.95)',
+                    zIndex: 1000,
+                    pointerEvents: 'none'
+                },
+                classes: {
+                    add: ['dragging', 'drag-source']
+                },
+                options: {
+                    priority: 'high'
+                }
+            },
+            changeLog: {
+                type: 'tool_drag_started',
+                data: {
+                    toolId: toolId,
+                    sourceContainer: this.containerId,
+                    position: position,
+                    timestamp: Date.now()
+                }
+            }
+        };
+    }
+
+    updateToolDrag(parameters) {
+        const { toolId, position, hoveredTarget } = parameters;
+        const tool = this.getTool(toolId);
+        
+        if (!tool || !tool.isDragging) {
+            return { success: false, reason: 'invalid_drag_state' };
+        }
+
+        // Update drag position
+        tool.currentDragPosition = position;
+        
+        // Validate drop zone if provided
+        let dropZoneValid = false;
+        if (hoveredTarget) {
+            dropZoneValid = this.validateDropZone(hoveredTarget, tool);
+        }
+
+        return {
+            success: true,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: tool.toolElement?.id || `tool-${toolId}`,
+                styles: {
+                    transform: `translate(${position.x - tool.dragStartPosition.x}px, ${position.y - tool.dragStartPosition.y}px) scale(0.95)`,
+                    opacity: this.dragPreview.opacity
+                },
+                options: {
+                    priority: 'high',
+                    batch: true
+                }
+            },
+            dragInfo: {
+                valid: dropZoneValid,
+                hoveredTarget: hoveredTarget,
+                position: position
+            }
+        };
+    }
+
+    completeToolDrop(parameters) {
+        const { toolId, targetContainer, position } = parameters;
+        const tool = this.getTool(toolId);
+        
+        if (!tool || !tool.isDragging) {
+            return { success: false, reason: 'invalid_drag_state' };
+        }
+
+        // Validate the drop
+        const dropValid = this.validateDropZone(targetContainer, tool);
+        
+        if (dropValid) {
+            // Successful drop - tool moves to target
+            return this._executeSuccessfulToolDrop(tool, targetContainer, position);
+        } else {
+            // Failed drop - return to origin
+            return this._returnToolToOrigin(tool);
+        }
+    }
+
+    cancelToolDrag(parameters) {
+        const { toolId, reason } = parameters;
+        const tool = this.getTool(toolId);
+        
+        if (!tool || !tool.isDragging) {
+            return { success: false, reason: 'invalid_drag_state' };
+        }
+
+        return this._returnToolToOrigin(tool, reason);
+    }
+
+    validateDropZone(targetElement, tool) {
+        if (!targetElement || !tool) {
             return false;
         }
+
+        // Check if target is in valid drop zones
+        const targetId = targetElement.id || targetElement.dataset?.dropZone;
         
-        if (this.selectionMode === 'none') {
-            return false;
+        if (this.dropZones.length > 0) {
+            return this.dropZones.includes(targetId);
         }
-        
-        if (this.selectionMode === 'single') {
-            // Clear previous selections
-            this.selectedTools = [];
-        }
-        
-        if (!this.selectedTools.find(t => t.toolId === toolId)) {
-            this.selectedTools.push(tool);
-            console.log(`Tool selected: ${toolId}`);
-        }
-        
-        return true;
+
+        // If no specific drop zones defined, check for data attributes
+        return targetElement.hasAttribute('data-drop-zone') || 
+               targetElement.classList.contains('drop-zone');
     }
-    
-    deselectTool(toolId) {
-        this._removeFromSelectedTools(toolId);
-        console.log(`Tool deselected: ${toolId}`);
-        return this;
+
+    // ========================
+    // PRIVATE DRAG HELPER METHODS
+    // ========================
+
+    _executeSuccessfulToolDrop(tool, targetContainer, position) {
+        // Reset drag state
+        tool.isDragging = false;
+        tool.dragStartTime = null;
+        tool.dragStartPosition = null;
+        tool.currentDragPosition = null;
+
+        return {
+            success: true,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: tool.toolElement?.id || `tool-${tool.toolId}`,
+                styles: {
+                    transform: 'none',
+                    opacity: '1',
+                    zIndex: 'auto',
+                    pointerEvents: 'auto'
+                },
+                classes: {
+                    remove: ['dragging', 'drag-source'],
+                    add: ['dropped']
+                },
+                animation: {
+                    duration: 200,
+                    easing: 'ease-out'
+                }
+            },
+            changeLog: {
+                type: 'tool_drop_completed',
+                data: {
+                    toolId: tool.toolId,
+                    sourceContainer: this.containerId,
+                    targetContainer: targetContainer.id || 'unknown',
+                    position: position,
+                    success: true,
+                    timestamp: Date.now()
+                }
+            },
+            dropResult: {
+                toolId: tool.toolId,
+                targetContainer: targetContainer,
+                position: position
+            }
+        };
     }
-    
-    clearSelection() {
-        this.selectedTools = [];
-        console.log('All tools deselected');
-        return this;
+
+    _returnToolToOrigin(tool, reason = 'cancelled') {
+        // Reset drag state
+        tool.isDragging = false;
+        const startPos = tool.dragStartPosition || { x: 0, y: 0 };
+        tool.dragStartTime = null;
+        tool.dragStartPosition = null;
+        tool.currentDragPosition = null;
+
+        return {
+            success: true,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: tool.toolElement?.id || `tool-${tool.toolId}`,
+                animation: {
+                    transform: 'none',
+                    opacity: '1',
+                    duration: 300,
+                    easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)'
+                },
+                styles: {
+                    zIndex: 'auto',
+                    pointerEvents: 'auto'
+                },
+                classes: {
+                    remove: ['dragging', 'drag-source']
+                }
+            },
+            changeLog: {
+                type: 'tool_drag_cancelled',
+                data: {
+                    toolId: tool.toolId,
+                    sourceContainer: this.containerId,
+                    reason: reason,
+                    timestamp: Date.now()
+                }
+            }
+        };
     }
-    
-    activateTool(toolId) {
-        const tool = this.getTool(toolId);
-        if (!tool || !tool.isEnabled) {
-            return false;
-        }
-        
-        // Add to active tools
-        if (!this.activeTools.find(t => t.toolId === toolId)) {
-            this.activeTools.push(tool);
-            tool.isActive = true;
-            console.log(`Tool activated: ${toolId}`);
-        }
-        
-        return true;
-    }
-    
-    deactivateTool(toolId) {
-        this._removeFromActiveTools(toolId);
-        const tool = this.getTool(toolId);
-        if (tool) {
-            tool.isActive = false;
-        }
-        console.log(`Tool deactivated: ${toolId}`);
-        return this;
-    }
-    
+
     // ========================
     // PANEL STATE METHODS
     // ========================
@@ -586,7 +785,64 @@ class ToolsContainer extends BaseContainer {
     getBehaviorState(behaviorName) {
         return this.behaviorState[behaviorName] || null;
     }
-    
+
+    getDragAndDropBehaviorSchema() {
+        if (!this.enabledBehaviors.includes('DragAndDropBehavior')) {
+            return null;
+        }
+
+        return {
+            "startToolDrag": {
+                "enabled": this.dragEnabled,
+                "triggers": ["mousedown", "touchstart"],
+                "parameters": { 
+                    "toolId": "string", 
+                    "position": "coordinates", 
+                    "event": "DOM_event",
+                    "graphics_handler": true 
+                }
+            },
+            "updateToolDrag": {
+                "enabled": this.dragEnabled,
+                "triggers": ["mousemove", "touchmove"],
+                "parameters": { 
+                    "toolId": "string", 
+                    "position": "coordinates", 
+                    "hoveredTarget": "DOM_element",
+                    "graphics_handler": true 
+                }
+            },
+            "completeToolDrop": {
+                "enabled": this.dragEnabled,
+                "triggers": ["mouseup", "touchend"],
+                "parameters": { 
+                    "toolId": "string", 
+                    "targetContainer": "DOM_element", 
+                    "position": "coordinates",
+                    "graphics_handler": true 
+                }
+            },
+            "cancelToolDrag": {
+                "enabled": this.dragEnabled,
+                "triggers": ["Escape", "contextmenu"],
+                "parameters": { 
+                    "toolId": "string", 
+                    "reason": "cancellation_type",
+                    "graphics_handler": true 
+                }
+            },
+            "validateDropZone": {
+                "enabled": this.dragEnabled,
+                "triggers": ["mouseover", "mouseenter"],
+                "parameters": { 
+                    "targetElement": "DOM_element", 
+                    "tool": "tool_object",
+                    "graphics_handler": true 
+                }
+            }
+        };
+    }
+
     // ========================
     // VALIDATION HELPER METHODS
     // ========================
@@ -606,20 +862,6 @@ class ToolsContainer extends BaseContainer {
         }
         
         return true;
-    }
-    
-    _removeFromActiveTools(toolId) {
-        const index = this.activeTools.findIndex(tool => tool.toolId === toolId);
-        if (index > -1) {
-            this.activeTools.splice(index, 1);
-        }
-    }
-    
-    _removeFromSelectedTools(toolId) {
-        const index = this.selectedTools.findIndex(tool => tool.toolId === toolId);
-        if (index > -1) {
-            this.selectedTools.splice(index, 1);
-        }
     }
     
     // ========================
@@ -661,8 +903,7 @@ class ToolsContainer extends BaseContainer {
             isPanelOpen: this.isPanelOpen,
             panelPosition: this.panelPosition,
             toolCount: this.tools.length,
-            activeToolCount: this.activeTools.length,
-            selectedToolCount: this.selectedTools.length,
+            // Note: activeToolCount and selectedToolCount removed - managed by Event Handler
             enabledBehaviors: this.enabledBehaviors,
             theme: this.theme,
             toolLayout: this.toolLayout
@@ -670,10 +911,9 @@ class ToolsContainer extends BaseContainer {
     }
     
     reset() {
-        // Clear all tools and selections
+        // Clear all tools
         this.tools = [];
-        this.activeTools = [];
-        this.selectedTools = [];
+        // Note: activeTools and selectedTools arrays removed - state managed by Event Handler
         
         // Reset to initial state
         this.isPanelOpen = true;
@@ -700,7 +940,6 @@ class ToolsContainer extends BaseContainer {
             isDraggable: options.isDraggable !== undefined ? options.isDraggable : true,
             position: options.position || { x: 0, y: 0 },
             size: options.size || { width: 32, height: 32 },
-            shortcut: options.shortcut || '',
             config: options.config || {},
             behaviorOverrides: options.behaviorOverrides || {}
         };
@@ -723,8 +962,8 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // Tool Management Properties
-// - tools: array of ToolItem objects (collection of available tools in this container. There should presently be none)
-// - activeTools: array of ToolItem objects (tools currently being used/dragged)
+// - tools: array of ToolItem objects (collection of available tools in this container)
+// Note: activeTools and selectedTools arrays removed - state managed by Event Handler
 // - toolCategories: array of strings (groupings like "drawing", "text", "shapes", "selection")
 // - toolLayout: choose("grid", "list", "accordion", "tabs") (how tools are visually arranged)
 
@@ -744,9 +983,9 @@ if (typeof module !== 'undefined' && module.exports) {
 // - dragConstraints: object (boundaries and rules for drag operations)
 // - returnOnFailedDrop: boolean (whether tools return to origin if drop fails)
 
-// Tool Interaction Properties
-// - selectionMode: choose("single", "multiple", "none") (how many tools can be selected at once)
-// - selectedTools: array of ToolItem objects (currently selected tools)
+// Tool Interaction Properties (Event Handler Managed)
+// - selectionMode: choose("single", "multiple", "none") (configuration for Event Handler)
+// Note: Tool selection and activation state managed by Event Handler and DragAndDropBehavior
 // - toolHoverEffects: boolean (whether tools show visual feedback on hover)
 // - doubleClickAction: choose("activate", "edit", "duplicate", "none") (what happens on tool double-click)
 // - contextMenuEnabled: boolean (whether tools show right-click menus)
@@ -794,7 +1033,6 @@ if (typeof module !== 'undefined' && module.exports) {
 // - isDraggable: boolean (whether this specific tool can be dragged)
 // - position: object { x, y } (position within the tools container)
 // - size: object { width, height } (size of this tool's representation)
-// - shortcut: string (keyboard shortcut for activating this tool)
 // - config: object (tool-specific configuration and settings)
 // - behaviorOverrides: object (tool-specific behavior modifications)
 

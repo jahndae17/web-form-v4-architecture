@@ -36,7 +36,10 @@ class DragAndDropBehavior {
             
             // Constraint Configuration
             dragBounds: null, // { left, top, right, bottom }
+            
+            // Drop zone configuration
             validDropZones: [], // container IDs
+            dropTargetContainers: [], // actual container objects with drop handling
             invalidDropZones: [], // container IDs
             dragFilter: null, // function(item) => boolean
             dropFilter: null, // function(item, target) => boolean
@@ -481,11 +484,20 @@ class DragAndDropBehavior {
     calculateValidTargets(item) {
         const validTargets = [];
         
-        // Check configured valid drop zones
+        // Check configured valid drop zones (HTML elements)
         if (this.config.validDropZones.length > 0) {
             this.config.validDropZones.forEach(zoneId => {
                 const zone = document.getElementById(zoneId);
                 if (zone) validTargets.push(zone);
+            });
+        }
+        
+        // Add container objects' DOM elements as targets
+        if (this.config.dropTargetContainers.length > 0) {
+            this.config.dropTargetContainers.forEach(container => {
+                if (container.element && !validTargets.includes(container.element)) {
+                    validTargets.push(container.element);
+                }
             });
         }
         
@@ -570,6 +582,28 @@ class DragAndDropBehavior {
             return { valid: false, reason: 'target_not_in_valid_zone' };
         }
         
+        // Check container objects for advanced validation
+        if (this.config.dropTargetContainers.length > 0) {
+            const targetContainer = this.config.dropTargetContainers.find(container => 
+                container.id === target.id || container.element === target
+            );
+            
+            if (targetContainer && typeof targetContainer.canAcceptDrop === 'function') {
+                const containerValidation = targetContainer.canAcceptDrop(this.dragState.item, {
+                    position: this.dragState.currentPosition,
+                    source: this.dragState.source
+                });
+                
+                if (!containerValidation.allowed) {
+                    return { 
+                        valid: false, 
+                        reason: containerValidation.reason || 'container_rejected_drop',
+                        details: containerValidation.message
+                    };
+                }
+            }
+        }
+        
         // Apply drop filter if configured
         if (this.config.dropFilter && 
             !this.config.dropFilter(this.dragState.item, target)) {
@@ -580,6 +614,61 @@ class DragAndDropBehavior {
     }
     
     executeSuccessfulDrop(target, position) {
+        // Check if we have a container object that can handle the drop
+        if (this.config.dropTargetContainers.length > 0) {
+            const targetContainer = this.config.dropTargetContainers.find(container => 
+                container.id === target.id || container.element === target
+            );
+            
+            if (targetContainer && typeof targetContainer.handleDrop === 'function') {
+                const containerDropResult = targetContainer.handleDrop(this.dragState.item, {
+                    position: position,
+                    source: this.dragState.source,
+                    dragContext: this.dragState
+                });
+                
+                if (containerDropResult.success) {
+                    return {
+                        success: true,
+                        containerHandled: true,
+                        graphics_request: containerDropResult.graphics_request || {
+                            type: 'comprehensive_update',
+                            componentId: this.dragState.item.id,
+                            styles: {
+                                position: 'relative',
+                                left: '0px',
+                                top: '0px',
+                                transform: 'none',
+                                opacity: '1',
+                                filter: 'none'
+                            },
+                            classes: {
+                                remove: ['dragging', 'drag-source', 'drag-preview']
+                            },
+                            animation: this.getVisualSchema().animations.dragEnd,
+                            zIndex: 'auto'
+                        },
+                        changeLog: containerDropResult.changeLog || {
+                            type: 'drag_dropped_container_handled',
+                            itemId: this.dragState.item.id,
+                            sourceContainer: this.hostContainer.id,
+                            targetContainer: target.id,
+                            position: position,
+                            success: true,
+                            timestamp: Date.now()
+                        }
+                    };
+                } else {
+                    return {
+                        success: false,
+                        reason: 'container_drop_failed',
+                        details: containerDropResult.error || 'Container failed to handle drop'
+                    };
+                }
+            }
+        }
+        
+        // Fallback to default drop handling
         return {
             success: true,
             graphics_request: {

@@ -9,7 +9,7 @@
  * ✅ Configuration and constraint testing
  */
 
-const DragAndDropBehavior = require('./DragAndDropBehavior.js');
+const DragAndDropBehavior = require('./App/Components/Developer Level/DragAndDropBehavior.js');
 
 // Mock host container for testing
 class MockHostContainer {

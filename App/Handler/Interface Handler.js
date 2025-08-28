@@ -80,6 +80,14 @@ class InterfaceHandler {
         // Touch events for mobile
         document.addEventListener('touchstart', this.handleTouchStart.bind(this), true);
         document.addEventListener('touchend', this.handleTouchEnd.bind(this), true);
+        
+        // Drag and drop events
+        document.addEventListener('dragstart', this.handleDragStart.bind(this), true);
+        document.addEventListener('dragend', this.handleDragEnd.bind(this), true);
+        document.addEventListener('dragover', this.handleDragOver.bind(this), true);
+        document.addEventListener('drop', this.handleDrop.bind(this), true);
+        document.addEventListener('dragenter', this.handleDragEnter.bind(this), true);
+        document.addEventListener('dragleave', this.handleDragLeave.bind(this), true);
     }
     
     /**
@@ -541,6 +549,114 @@ class InterfaceHandler {
         this.changeLog.stopListening();
         
         this.log('InterfaceHandler destroyed');
+    }
+
+    // ========================
+    // DRAG AND DROP HANDLERS
+    // ========================
+
+    /**
+     * Handle drag start events
+     */
+    handleDragStart(event) {
+        // Find the draggable tool element
+        const toolElement = event.target.closest('[data-tool-type]') || event.target.closest('.tool-item');
+        
+        if (toolElement) {
+            const toolType = toolElement.getAttribute('data-tool-type') || 
+                           toolElement.getAttribute('data-tool-id') ||
+                           toolElement.id?.replace('tool-', '');
+            
+            if (toolType) {
+                console.log('🎯 Drag started for tool:', toolType);
+                
+                // Store drag data
+                event.dataTransfer.setData('text/plain', toolType);
+                event.dataTransfer.effectAllowed = 'copy';
+                
+                // Trigger DragAndDropBehavior through Event Handler
+                if (this.eventHandler) {
+                    this.eventHandler.trigger('drag-start', {
+                        toolType: toolType,
+                        element: toolElement,
+                        event: event
+                    });
+                }
+            }
+        }
+    }
+
+    /**
+     * Handle drag end events
+     */
+    handleDragEnd(event) {
+        console.log('🎯 Drag ended');
+        
+        if (this.eventHandler) {
+            this.eventHandler.trigger('drag-end', {
+                element: event.target,
+                event: event
+            });
+        }
+    }
+
+    /**
+     * Handle drag over events (required for drop zones)
+     */
+    handleDragOver(event) {
+        // Prevent default to allow drop
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+    }
+
+    /**
+     * Handle drag enter events
+     */
+    handleDragEnter(event) {
+        const dropZone = event.target.closest('.canvas-area') || event.target.closest('[data-drop-zone]');
+        
+        if (dropZone) {
+            console.log('🎯 Drag entered drop zone');
+            event.preventDefault();
+        }
+    }
+
+    /**
+     * Handle drag leave events
+     */
+    handleDragLeave(event) {
+        // Only log for debugging, no special handling needed
+    }
+
+    /**
+     * Handle drop events
+     */
+    handleDrop(event) {
+        event.preventDefault();
+        
+        const dropZone = event.target.closest('.canvas-area') || event.target.closest('[data-drop-zone]');
+        
+        if (dropZone) {
+            const toolType = event.dataTransfer.getData('text/plain');
+            console.log('🎯 Drop detected - tool:', toolType, 'zone:', dropZone.id || dropZone.className);
+            
+            // Calculate drop position
+            const rect = dropZone.getBoundingClientRect();
+            const dropPosition = {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+            
+            // Trigger DragAndDropBehavior through Event Handler
+            if (this.eventHandler) {
+                this.eventHandler.trigger('drop-completed', {
+                    toolType: toolType,
+                    dropZone: dropZone,
+                    position: dropPosition,
+                    event: event
+                });
+            }
+        }
     }
 }
 

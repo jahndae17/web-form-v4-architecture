@@ -143,18 +143,6 @@
             opacity: 0;
         }
 
-        .tool-shortcut {
-            position: absolute;
-            top: 2px;
-            right: 4px;
-            background: rgba(0, 0, 0, 0.7);
-            color: #fff;
-            font-size: 8px;
-            padding: 1px 3px;
-            border-radius: 2px;
-            opacity: 0.7;
-        }
-
         /* Canvas Area */
         .canvas-area {
             flex: 1;
@@ -297,11 +285,12 @@
         </div>
 
         <!-- Canvas Area -->
-        <div class="canvas-area">
+        <div class="canvas-area" id="canvas-area" data-drop-zone="true" data-drop-zone-type="canvas">
             <div class="canvas-placeholder">
                 <h2>🎨 Form Builder Canvas</h2>
                 <p>Select the Base User Container (📦) tool to start building forms.<br>
-                Use the hamburger menu (☰) to collapse/expand the tool panel.</p>
+                Use the hamburger menu (☰) to collapse/expand the tool panel.<br>
+                <strong>Drag tools from the panel to this canvas area to use them!</strong></p>
             </div>
         </div>
 
@@ -318,6 +307,8 @@
     <script src="../Handler/Event Handler.js"></script>
     <script src="../Handler/Graphics Handler.js"></script>
     <script src="../Components/Developer Level/base container.js"></script>
+    <script src="../Components/Developer Level/FormBuilderCanvas.js"></script>
+    <script src="../Components/Developer Level/DragAndDropBehavior.js"></script>
     <script src="../Components/Developer Level/tools container.js"></script>
     <script src="../Components/Developer Level/ToolPanelToggleBehavior.js"></script>
     
@@ -393,13 +384,21 @@
                     await this.graphicsHandler.init();
                     console.log('🎨 Graphics Handler initialized');
                     
-                    // 4. Create ToolsContainer with proper architecture
-                    this.toolsContainer = new ToolsContainer('tools-container', null, {
+                    // 4. Create root application container
+                    this.rootContainer = new BaseContainer('app-root', null, 'application');
+                    console.log('🏠 Root application container created');
+                    
+                    // 5. Create ToolsContainer as child of root
+                    // 5. Create ToolsContainer as child of root
+                    this.toolsContainer = new ToolsContainer('tools-container', this.rootContainer, {
                         panelPosition: 'left',
                         isPanelOpen: true,
                         toolLayout: 'grid',
                         theme: 'dark',
-                        selectionMode: 'single'
+                        selectionMode: 'single',
+                        allowedToolTypes: ['brush', 'text', 'shape', 'selector', 'eraser', 'container', 'drawing', 'form'],
+                        toolCategories: ['drawing', 'text', 'shapes', 'selection', 'container', 'form'],
+                        dropZones: ['canvas-area']
                     });
                     
                     // 5. Assign DOM element to container and set Event Handler
@@ -412,7 +411,34 @@
                     this.toolsContainer.graphicsHandler = this.graphicsHandler;  // Assign Graphics Handler
                     console.log('🔧 ToolsContainer created and linked to DOM');
 
-                    // 6. Create and attach behaviors
+                    // 6. Create FormBuilderCanvas as child of root
+                    this.formBuilderCanvas = new FormBuilderCanvas('canvas-area', this.rootContainer, {
+                        backgroundColor: '#f8f9fa',
+                        borderStyle: '2px dashed #dee2e6',
+                        snapToGrid: true,
+                        showGrid: true,
+                        allowOverlap: false,
+                        validDropSources: ['tools-container'],
+                        allowedToolTypes: ['container', 'form', 'drawing']
+                    });
+                    
+                    // Assign DOM element and handlers to canvas
+                    const canvasElement = document.getElementById('canvas-area');
+                    if (!canvasElement) {
+                        throw new Error('Canvas area element not found in DOM');
+                    }
+                    this.formBuilderCanvas.element = canvasElement;
+                    this.formBuilderCanvas.eventHandler = this.eventHandler;
+                    this.formBuilderCanvas.graphicsHandler = this.graphicsHandler;
+                    
+                    // Initialize the canvas
+                    const canvasInitResult = await this.formBuilderCanvas.initializeContainer();
+                    if (!canvasInitResult.success) {
+                        throw new Error(`Failed to initialize FormBuilderCanvas: ${canvasInitResult.error}`);
+                    }
+                    console.log('📋 FormBuilderCanvas created and initialized');
+
+                    // 7. Create and attach behaviors
                     await this.initializeBehaviors();
                     
                     // 7. Create tools and setup initial state
@@ -447,7 +473,33 @@
                 });
                 console.log('🔄 Toggle behavior attached with Graphics Handler integration');
 
-                // Set up reactive panel state changes
+                // Create and attach drag and drop behavior
+                this.dragAndDropBehavior = new DragAndDropBehavior();
+                
+                const dragAttachResult = this.dragAndDropBehavior.attachToBehavior(this.toolsContainer);
+                if (dragAttachResult.success) {
+                    // Configure the behavior with FormBuilderCanvas as drop target
+                    this.dragAndDropBehavior.configureBehavior({
+                        enabled: this.toolsContainer.dragEnabled,
+                        dragThreshold: 5,
+                        dragAxis: 'both',
+                        showDragPreview: true,
+                        previewOpacity: this.toolsContainer.dragPreview.opacity,
+                        validDropZones: ['canvas-area'], // HTML element ID for validation
+                        dropTargetContainers: [this.formBuilderCanvas], // Container object for handling
+                        returnOnFailedDrop: this.toolsContainer.returnOnFailedDrop,
+                        throttleMove: 16
+                    });
+                    
+                    // Pass references for coordination
+                    this.toolsContainer.dragAndDropBehavior = this.dragAndDropBehavior;
+                    this.formBuilderCanvas.dragAndDropBehavior = this.dragAndDropBehavior;
+                    console.log('🎯 DragAndDropBehavior attached and configured with FormBuilderCanvas');
+                } else {
+                    console.error('❌ Failed to attach DragAndDropBehavior:', dragAttachResult);
+                }
+
+                // 8. Set up reactive panel state changes
                 this.toggleBehavior.onPanelStateChange = () => {
                     console.log('� Panel state changed, updating through Graphics Handler...');
                     this.requestPanelUpdate();
@@ -458,17 +510,15 @@
                 // Add Base User Container as the primary form building tool
                 const containerTool = ToolsContainer.createToolItem('base-user-container', 'User Container', 'container', {
                     icon: '📦', 
-                    description: 'Base User Container - Foundation for all form elements', 
-                    shortcut: 'U'
+                    description: 'Base User Container - Foundation for all form elements'
                 });
 
                 // Add the container tool to the toolbar
                 this.toolsContainer.addTool(containerTool);
                 console.log(`🔧 Added tool: ${containerTool.icon} ${containerTool.name}`);
 
-                // Select the container tool as default
-                this.toolsContainer.selectTool('base-user-container');
-                this.toolsContainer.activateTool('base-user-container');
+                // Note: Tool selection and activation will be handled by Event Handler
+                // when user interacts with the tool directly
                 
                 console.log('🔧 Base User Container tool added to toolbar');
             }
@@ -529,14 +579,17 @@
                 toolDiv.dataset.toolId = tool.toolId;
                 toolDiv.id = `tool-${tool.toolId}`;  // Ensure unique ID for Graphics Handler
                 
-                // Add selection/active states through CSS classes only
-                if (tool.isSelected) toolDiv.classList.add('selected');
-                if (tool.isActive) toolDiv.classList.add('active');
+                // Add drag attributes for DragAndDropBehavior
+                toolDiv.draggable = tool.isDraggable !== false;
+                toolDiv.dataset.dragType = 'tool';
+                toolDiv.dataset.toolType = tool.type;
+                
+                // Note: Tool states (selected/active) will be managed by Event Handler
+                // and applied through Graphics Handler when needed
 
                 toolDiv.innerHTML = `
                     <div class="tool-icon">${tool.icon}</div>
                     <div class="tool-name">${tool.name}</div>
-                    <div class="tool-shortcut">${tool.shortcut}</div>
                 `;
 
                 // NO EVENT LISTENERS - Let IO Handler capture inputs
@@ -545,41 +598,8 @@
                 return toolDiv;
             }
 
-            // Handle tool selection through Event Handler (not direct calls)
-            async selectToolReactive(toolId) {
-                console.log(`🎯 Tool selection requested: ${toolId}`);
-                
-                // Request selection animation through Graphics Handler
-                await this.graphicsHandler.animateComponent({
-                    componentId: `tool-${toolId}`,
-                    animation: {
-                        transform: { 
-                            from: 'scale(1)', 
-                            to: 'scale(0.95)', 
-                            back: 'scale(1)' 
-                        }
-                    },
-                    duration: 200,
-                    easing: 'ease-in-out'
-                });
-
-                // Update container state
-                this.toolsContainer.selectTool(toolId);
-                this.toolsContainer.activateTool(toolId);
-
-                // Re-render through reactive pattern
-                await this.renderToolsReactive();
-                
-                // Update status
-                this.updateStatusReactive();
-                
-                // Notify system of change
-                this.changeLog.updateContext('tools.selection.changed', {
-                    toolId: toolId,
-                    tool: this.toolsContainer.getTool(toolId),
-                    timestamp: Date.now()
-                });
-            }
+            // Note: Tool selection now handled directly by Event Handler through drag and drop interactions
+            // No separate selection methods needed
 
             async requestPanelUpdate() {
                 try {
@@ -627,7 +647,9 @@
             }
 
             updateStatusReactive() {
-                const currentTool = this.toolsContainer.tools.find(t => t.isSelected);
+                // Note: Tool selection state now managed by Event Handler
+                // For status display, we'll show first tool or none
+                const currentTool = this.toolsContainer.tools.length > 0 ? this.toolsContainer.tools[0] : null;
                 
                 // Update status through DOM (acceptable for status display)
                 const elements = {
@@ -655,7 +677,7 @@
             // Public API for debugging (maintaining compatibility)
             getContainer() { return this.toolsContainer; }
             getState() { return this.toolsContainer?.getState(); }
-            async selectTool(id) { return await this.selectToolReactive(id); }
+            // Note: Tool interaction now handled through Event Handler - no direct selectTool method
         }
 
         // ========================
@@ -675,15 +697,93 @@
         window.debugTools = {
             getContainer: () => window.toolsApp?.getContainer(),
             getState: () => window.toolsApp?.getState(),
-            selectTool: (id) => window.toolsApp?.selectTool(id),
+            // Note: Tool selection now handled by Event Handler - no direct methods
             getGraphicsHandler: () => window.toolsApp?.graphicsHandler,
             getEventHandler: () => window.toolsApp?.eventHandler,
+            getDragAndDropBehavior: () => window.toolsApp?.dragAndDropBehavior,
+            testDrag: (toolId) => {
+                const behavior = window.toolsApp?.dragAndDropBehavior;
+                const tool = window.toolsApp?.toolsContainer?.getTool(toolId);
+                if (behavior && tool) {
+                    console.log('🧪 Testing drag for tool:', toolId);
+                    return behavior.startDrag({
+                        target: { id: toolId },
+                        position: { x: 100, y: 100 },
+                        event: null
+                    });
+                }
+                return 'Tool or behavior not found';
+            },
             clearCache: () => {
                 localStorage.removeItem('panel-state');
                 console.log('✅ Panel state cache cleared');
                 return 'Cache cleared successfully';
             }
         };
+
+        // ========================
+        // TEMPORARY DRAG EVENT LISTENERS (Proof of Concept)
+        // ========================
+        
+        // Add drag event listeners after initialization
+        document.addEventListener('dragstart', (event) => {
+            const toolElement = event.target.closest('.tool-item');
+            if (toolElement && window.toolsApp?.dragAndDropBehavior) {
+                const toolId = toolElement.id?.replace('tool-', '') || 'unknown';
+                console.log('🎯 HTML5 Drag started for tool:', toolId);
+                
+                // Store drag data
+                event.dataTransfer.setData('text/plain', toolId);
+                event.dataTransfer.effectAllowed = 'copy';
+                
+                // Trigger DragAndDropBehavior
+                try {
+                    const result = window.toolsApp.dragAndDropBehavior.startDrag({
+                        target: { id: toolId, type: toolId },
+                        position: { x: event.clientX, y: event.clientY },
+                        event: event
+                    });
+                    console.log('🎯 DragAndDropBehavior.startDrag result:', result);
+                } catch (error) {
+                    console.error('❌ Error in startDrag:', error);
+                }
+            }
+        });
+        
+        document.addEventListener('dragover', (event) => {
+            // Prevent default to allow drop
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        });
+        
+        document.addEventListener('drop', (event) => {
+            event.preventDefault();
+            
+            const dropZone = event.target.closest('.canvas-area');
+            if (dropZone && window.toolsApp?.dragAndDropBehavior) {
+                const toolId = event.dataTransfer.getData('text/plain');
+                console.log('🎯 HTML5 Drop detected - tool:', toolId);
+                
+                // Calculate drop position
+                const rect = dropZone.getBoundingClientRect();
+                const dropPosition = {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+                
+                // Trigger DragAndDropBehavior
+                try {
+                    const result = window.toolsApp.dragAndDropBehavior.completeDrop({
+                        target: { id: 'canvas-area' },
+                        position: dropPosition,
+                        event: event
+                    });
+                    console.log('🎯 DragAndDropBehavior.completeDrop result:', result);
+                } catch (error) {
+                    console.error('❌ Error in completeDrop:', error);
+                }
+            }
+        });
 
         console.log('🎨 Reactive ToolsContainer loaded. Architecture compliant!');
         console.log('🔧 Try debugTools.getGraphicsHandler() in console!');
