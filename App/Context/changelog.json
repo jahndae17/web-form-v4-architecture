@@ -1,0 +1,66 @@
+{
+  "changelog": {
+    "entries": [],
+    "last_sequence_id": 0,
+    "last_updated": 0,
+    "version": "1.0.0",
+    "max_entries": 1000,
+    "auto_cleanup": true,
+    "retention_hours": 24
+  },
+  "handlers": {
+    "io_handler": {
+      "last_read_sequence": 0,
+      "last_write_sequence": 0,
+      "is_listening": false,
+      "poll_interval": 50
+    },
+    "interface_handler": {
+      "last_read_sequence": 0,
+      "last_write_sequence": 0,
+      "is_listening": false,
+      "poll_interval": 50
+    },
+    "event_handler": {
+      "last_read_sequence": 0,
+      "last_write_sequence": 0,
+      "is_listening": false,
+      "poll_interval": 50
+    }
+  },
+  "entry_template": {
+    "sequence_id": 0,
+    "timestamp": 0,
+    "handler": "",
+    "action": "",
+    "context_path": "",
+    "old_value": null,
+    "new_value": null,
+    "change_type": "",
+    "metadata": {}
+  },
+  "change_types": [
+    "create",
+    "update", 
+    "delete",
+    "lock_acquired",
+    "lock_released",
+    "state_change",
+    "event_triggered",
+    "operation_started",
+    "operation_completed",
+    "error_occurred",
+    "warning_issued",
+    "context_reset"
+  ],
+  "lock_registry": {
+    "active_locks": {},
+    "lock_queue": [],
+    "lock_history": []
+  },
+  "notification_queue": {
+    "pending_notifications": [],
+    "processed_notifications": [],
+    "failed_notifications": []
+  }
+}

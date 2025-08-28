@@ -1,0 +1,413 @@
+//Contains all user input events. Feeds them to the InterfaceHandler to help inform
+//`C:\Users\JahnJ\Desktop\James HP Spectre data files\1.1 Work WIP\012 Web Form\v4\App\Context\current_context_meta.json`
+//Read context responsibility.md and build this Handler based off it
+
+/**
+ * IO Handler - Captures all user input events and updates context
+ * Feeds information to InterfaceHandler for component interaction tracking
+ */
+
+class IOHandler {
+    constructor(changeLogManager) {
+        this.changeLog = changeLogManager;
+        this.handlerName = 'io_handler';
+        
+        // Input state tracking
+        this.inputState = {
+            mouse: {
+                position: { x: 0, y: 0 },
+                buttons: new Set(),
+                isDragging: false,
+                dragStart: null,
+                velocity: { x: 0, y: 0 },
+                lastMoveTime: 0
+            },
+            keyboard: {
+                keysPressed: new Set(),
+                modifiers: {
+                    ctrl: false,
+                    shift: false,
+                    alt: false,
+                    meta: false
+                },
+                lastKeySequence: [],
+                inputMode: 'navigation'
+            },
+            touch: {
+                activeTouches: new Map(),
+                gestureActive: false,
+                lastTouchTime: 0
+            }
+        };
+        
+        // Event listeners storage
+        this.eventListeners = new Map();
+        
+        this.init();
+    }
+    
+    async init() {
+        // Register with changelog system
+        this.changeLog.registerHandler(this.handlerName);
+        
+        // Start listening for changes from other handlers
+        this.changeLog.startListening(this.handleContextChanges.bind(this));
+        
+        // Setup DOM event listeners
+        this.setupEventListeners();
+        
+        console.log('IOHandler initialized');
+    }
+    
+    /**
+     * Setup all input event listeners
+     */
+    setupEventListeners() {
+        // Mouse events
+        this.addListener(document, 'mousedown', this.handleMouseDown.bind(this));
+        this.addListener(document, 'mouseup', this.handleMouseUp.bind(this));
+        this.addListener(document, 'mousemove', this.handleMouseMove.bind(this));
+        this.addListener(document, 'wheel', this.handleWheel.bind(this));
+        this.addListener(document, 'contextmenu', this.handleContextMenu.bind(this));
+        
+        // Keyboard events
+        this.addListener(document, 'keydown', this.handleKeyDown.bind(this));
+        this.addListener(document, 'keyup', this.handleKeyUp.bind(this));
+        this.addListener(document, 'keypress', this.handleKeyPress.bind(this));
+        
+        // Touch events
+        this.addListener(document, 'touchstart', this.handleTouchStart.bind(this));
+        this.addListener(document, 'touchmove', this.handleTouchMove.bind(this));
+        this.addListener(document, 'touchend', this.handleTouchEnd.bind(this));
+        this.addListener(document, 'touchcancel', this.handleTouchCancel.bind(this));
+        
+        // Focus events
+        this.addListener(document, 'focusin', this.handleFocusIn.bind(this));
+        this.addListener(document, 'focusout', this.handleFocusOut.bind(this));
+        
+        // Window events
+        this.addListener(window, 'blur', this.handleWindowBlur.bind(this));
+        this.addListener(window, 'focus', this.handleWindowFocus.bind(this));
+        this.addListener(window, 'resize', this.handleWindowResize.bind(this));
+    }
+    
+    /**
+     * Add event listener and track it
+     */
+    addListener(element, event, handler) {
+        element.addEventListener(event, handler);
+        
+        if (!this.eventListeners.has(element)) {
+            this.eventListeners.set(element, new Map());
+        }
+        this.eventListeners.get(element).set(event, handler);
+    }
+    
+    /**
+     * Handle mouse down events
+     */
+    async handleMouseDown(event) {
+        const button = event.button;
+        this.inputState.mouse.buttons.add(button);
+        
+        // Update context
+        await this.changeLog.updateContext(
+            'current_context_meta.current_mouse_input.buttons_pressed',
+            Array.from(this.inputState.mouse.buttons),
+            'update',
+            { event_type: 'mousedown', button, timestamp: Date.now() }
+        );
+        
+        // Check for drag start
+        if (button === 0) { // Left button
+            this.inputState.mouse.dragStart = { 
+                x: event.clientX, 
+                y: event.clientY,
+                time: Date.now()
+            };
+        }
+        
+        await this.updateMousePosition(event);
+    }
+    
+    /**
+     * Handle mouse up events
+     */
+    async handleMouseUp(event) {
+        const button = event.button;
+        this.inputState.mouse.buttons.delete(button);
+        
+        // Update context
+        await this.changeLog.updateContext(
+            'current_context_meta.current_mouse_input.buttons_pressed',
+            Array.from(this.inputState.mouse.buttons),
+            'update',
+            { event_type: 'mouseup', button, timestamp: Date.now() }
+        );
+        
+        // Handle drag end
+        if (button === 0 && this.inputState.mouse.isDragging) {
+            this.inputState.mouse.isDragging = false;
+            this.inputState.mouse.dragStart = null;
+            
+            await this.changeLog.updateContext(
+                'current_context_meta.current_mouse_input.is_dragging',
+                false,
+                'update',
+                { event_type: 'drag_end', timestamp: Date.now() }
+            );
+        }
+        
+        await this.updateMousePosition(event);
+    }
+    
+    /**
+     * Handle mouse move events
+     */
+    async handleMouseMove(event) {
+        const now = Date.now();
+        const deltaTime = now - this.inputState.mouse.lastMoveTime;
+        
+        if (deltaTime > 0) {
+            // Calculate velocity
+            const deltaX = event.clientX - this.inputState.mouse.position.x;
+            const deltaY = event.clientY - this.inputState.mouse.position.y;
+            
+            this.inputState.mouse.velocity = {
+                x: deltaX / deltaTime * 1000, // pixels per second
+                y: deltaY / deltaTime * 1000
+            };
+        }
+        
+        // Check for drag
+        if (this.inputState.mouse.dragStart && !this.inputState.mouse.isDragging) {
+            const dragThreshold = 5; // pixels
+            const deltaX = event.clientX - this.inputState.mouse.dragStart.x;
+            const deltaY = event.clientY - this.inputState.mouse.dragStart.y;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            if (distance > dragThreshold) {
+                this.inputState.mouse.isDragging = true;
+                
+                await this.changeLog.updateContext(
+                    'current_context_meta.current_mouse_input.is_dragging',
+                    true,
+                    'update',
+                    { event_type: 'drag_start', timestamp: now }
+                );
+                
+                await this.changeLog.updateContext(
+                    'current_context_meta.current_mouse_input.drag_start_position',
+                    this.inputState.mouse.dragStart,
+                    'update'
+                );
+            }
+        }
+        
+        // Update drag delta if dragging
+        if (this.inputState.mouse.isDragging && this.inputState.mouse.dragStart) {
+            const dragDelta = {
+                x: event.clientX - this.inputState.mouse.dragStart.x,
+                y: event.clientY - this.inputState.mouse.dragStart.y
+            };
+            
+            await this.changeLog.updateContext(
+                'current_context_meta.current_mouse_input.drag_delta',
+                dragDelta,
+                'update'
+            );
+        }
+        
+        this.inputState.mouse.lastMoveTime = now;
+        await this.updateMousePosition(event);
+    }
+    
+    /**
+     * Update mouse position in context
+     */
+    async updateMousePosition(event) {
+        this.inputState.mouse.position = {
+            x: event.clientX,
+            y: event.clientY
+        };
+        
+        await this.changeLog.updateContext(
+            'current_context_meta.current_mouse_input.position',
+            {
+                x: event.clientX,
+                y: event.clientY,
+                relative_x: event.offsetX || 0,
+                relative_y: event.offsetY || 0
+            },
+            'update',
+            { timestamp: Date.now() }
+        );
+        
+        await this.changeLog.updateContext(
+            'current_context_meta.current_mouse_input.movement_velocity',
+            this.inputState.mouse.velocity,
+            'update'
+        );
+    }
+    
+    /**
+     * Handle keyboard events
+     */
+    async handleKeyDown(event) {
+        const key = event.key;
+        this.inputState.keyboard.keysPressed.add(key);
+        
+        // Update modifier states
+        this.inputState.keyboard.modifiers.ctrl = event.ctrlKey;
+        this.inputState.keyboard.modifiers.shift = event.shiftKey;
+        this.inputState.keyboard.modifiers.alt = event.altKey;
+        this.inputState.keyboard.modifiers.meta = event.metaKey;
+        
+        // Add to key sequence
+        this.inputState.keyboard.lastKeySequence.push({
+            key: key,
+            timestamp: Date.now(),
+            modifiers: { ...this.inputState.keyboard.modifiers }
+        });
+        
+        // Keep only last 10 keys
+        if (this.inputState.keyboard.lastKeySequence.length > 10) {
+            this.inputState.keyboard.lastKeySequence.shift();
+        }
+        
+        // Update context
+        await this.changeLog.updateContext(
+            'current_context_meta.current_keyboard_input.keys_pressed',
+            Array.from(this.inputState.keyboard.keysPressed),
+            'update',
+            { event_type: 'keydown', key, timestamp: Date.now() }
+        );
+        
+        await this.changeLog.updateContext(
+            'current_context_meta.current_keyboard_input.modifier_keys',
+            {
+                ...this.inputState.keyboard.modifiers,
+                tab: key === 'Tab',
+                escape: key === 'Escape'
+            },
+            'update'
+        );
+    }
+    
+    async handleKeyUp(event) {
+        const key = event.key;
+        this.inputState.keyboard.keysPressed.delete(key);
+        
+        // Update modifier states
+        this.inputState.keyboard.modifiers.ctrl = event.ctrlKey;
+        this.inputState.keyboard.modifiers.shift = event.shiftKey;
+        this.inputState.keyboard.modifiers.alt = event.altKey;
+        this.inputState.keyboard.modifiers.meta = event.metaKey;
+        
+        await this.changeLog.updateContext(
+            'current_context_meta.current_keyboard_input.keys_pressed',
+            Array.from(this.inputState.keyboard.keysPressed),
+            'update',
+            { event_type: 'keyup', key, timestamp: Date.now() }
+        );
+    }
+    
+    /**
+     * Handle changes from other handlers
+     */
+    handleContextChanges(changes) {
+        changes.forEach(change => {
+            console.log(`IOHandler received change from ${change.handler}: ${change.action} at ${change.context_path}`);
+            
+            // React to specific changes if needed
+            if (change.context_path.includes('interaction_locks')) {
+                // Some interaction was locked/unlocked
+                this.handleLockChange(change);
+            }
+        });
+    }
+    
+    /**
+     * Handle interaction lock changes
+     */
+    handleLockChange(change) {
+        // Adjust input handling based on locks
+        if (change.new_value === true) {
+            console.log(`IOHandler: Input restricted due to ${change.context_path}`);
+        } else {
+            console.log(`IOHandler: Input restriction lifted for ${change.context_path}`);
+        }
+    }
+    
+    /**
+     * Additional placeholder event handlers
+     */
+    async handleTouchStart(event) {
+        // Handle touch events
+        for (const touch of event.changedTouches) {
+            this.inputState.touch.activeTouches.set(touch.identifier, {
+                x: touch.clientX,
+                y: touch.clientY,
+                startTime: Date.now()
+            });
+        }
+        
+        await this.changeLog.updateContext(
+            'current_context_meta.current_mouse_input.position',
+            {
+                x: event.changedTouches[0].clientX,
+                y: event.changedTouches[0].clientY,
+                relative_x: 0,
+                relative_y: 0
+            },
+            'update',
+            { event_type: 'touch', timestamp: Date.now() }
+        );
+    }
+    
+    async handleWheel(event) {
+        await this.changeLog.updateContext(
+            'current_context_meta.current_mouse_input.wheel_delta',
+            event.deltaY,
+            'update',
+            { event_type: 'wheel', deltaX: event.deltaX, deltaZ: event.deltaZ, timestamp: Date.now() }
+        );
+    }
+    
+    // Placeholder handlers for other events
+    handleMouseOut(event) { /* Implement as needed */ }
+    handleKeyPress(event) { /* Implement as needed */ }
+    handleTouchMove(event) { /* Implement as needed */ }
+    handleTouchEnd(event) { /* Implement as needed */ }
+    handleTouchCancel(event) { /* Implement as needed */ }
+    handleFocusIn(event) { /* Implement as needed */ }
+    handleFocusOut(event) { /* Implement as needed */ }
+    handleWindowBlur(event) { /* Implement as needed */ }
+    handleWindowFocus(event) { /* Implement as needed */ }
+    handleWindowResize(event) { /* Implement as needed */ }
+    handleContextMenu(event) { /* Implement as needed */ }
+    
+    /**
+     * Cleanup and destroy
+     */
+    destroy() {
+        // Remove all event listeners
+        this.eventListeners.forEach((eventMap, element) => {
+            eventMap.forEach((handler, event) => {
+                element.removeEventListener(event, handler);
+            });
+        });
+        
+        this.eventListeners.clear();
+        this.changeLog.stopListening();
+        
+        console.log('IOHandler destroyed');
+    }
+}
+
+// Export for use
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = IOHandler;
+} else if (typeof window !== 'undefined') {
+    window.IOHandler = IOHandler;
+}

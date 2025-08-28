@@ -1,0 +1,305 @@
+{
+  "current_context_meta": {
+    "currently_in_object": {
+      "component_id": null,
+      "component_type": null,
+      "component_depth": 0,
+      "parent_component": null,
+      "is_root": false,
+      "nested_path": [],
+      "component_bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    
+    "current_mouse_input": {
+      "position": {
+        "x": 0,
+        "y": 0,
+        "relative_x": 0,
+        "relative_y": 0
+      },
+      "buttons_pressed": [],
+      "is_dragging": false,
+      "drag_start_position": {
+        "x": 0,
+        "y": 0
+      },
+      "drag_delta": {
+        "x": 0,
+        "y": 0
+      },
+      "hover_duration": 0,
+      "last_click_time": 0,
+      "click_count": 0,
+      "wheel_delta": 0,
+      "movement_velocity": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    
+    "current_keyboard_input": {
+      "keys_pressed": [],
+      "modifier_keys": {
+        "ctrl": false,
+        "shift": false,
+        "alt": false,
+        "meta": false,
+        "tab": false,
+        "escape": false
+      },
+      "last_key_sequence": [],
+      "input_mode": "navigation",
+      "text_input_active": false,
+      "text_selection": {
+        "start": 0,
+        "end": 0,
+        "text": ""
+      },
+      "repeat_key": null,
+      "repeat_count": 0
+    },
+    
+    "active_operations": {
+      "is_editing": false,
+      "is_creating": false,
+      "is_moving": false,
+      "is_resizing": false,
+      "is_selecting": false,
+      "is_deleting": false,
+      "is_copying": false,
+      "is_pasting": false,
+      "operation_type": null,
+      "operation_target": null,
+      "operation_start_time": 0,
+      "operation_progress": 0,
+      "can_cancel": false,
+      "requires_confirmation": false
+    },
+    
+    "modal_context": {
+      "active_modal": null,
+      "modal_stack": [],
+      "blocking_operations": [],
+      "requires_confirmation": false,
+      "modal_type": null,
+      "modal_data": {},
+      "backdrop_click_closes": true,
+      "escape_closes": true,
+      "overlay_active": false
+    },
+    
+    "selection_context": {
+      "selected_components": [],
+      "selection_type": "none",
+      "last_selected": null,
+      "selection_bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "clipboard_contents": null,
+      "clipboard_type": null,
+      "multi_select_active": false,
+      "selection_anchor": null,
+      "can_deselect": true
+    },
+    
+    "focus_context": {
+      "focused_component": null,
+      "focus_path": [],
+      "tab_index": 0,
+      "navigation_mode": "mouse",
+      "can_receive_focus": true,
+      "focus_trap_active": false,
+      "auto_focus_enabled": true,
+      "focus_visible": false,
+      "previous_focus": null,
+      "focus_within": false
+    },
+    
+    "interaction_locks": {
+      "drag_lock": false,
+      "resize_lock": false,
+      "edit_lock": false,
+      "modal_lock": false,
+      "async_operation_lock": false,
+      "animation_lock": false,
+      "validation_lock": false,
+      "save_lock": false,
+      "loading_lock": false,
+      "network_lock": false,
+      "render_lock": false,
+      "global_lock": false
+    },
+    
+    "timing_context": {
+      "last_interaction_time": 0,
+      "interaction_frequency": 0,
+      "idle_time": 0,
+      "session_start_time": 0,
+      "debounce_active": false,
+      "throttle_active": false,
+      "frame_rate": 60,
+      "performance_mode": "normal",
+      "last_render_time": 0,
+      "interaction_timeout": 30000
+    },
+    
+    "capability_context": {
+      "current_permissions": [
+        "read",
+        "write",
+        "create",
+        "delete"
+      ],
+      "disabled_actions": [],
+      "readonly_mode": false,
+      "accessibility_mode": false,
+      "touch_device": false,
+      "mobile_device": false,
+      "high_contrast": false,
+      "reduced_motion": false,
+      "screen_reader_active": false,
+      "keyboard_only": false
+    },
+    
+    "state_context": {
+      "has_unsaved_changes": false,
+      "undo_stack_size": 0,
+      "redo_stack_size": 0,
+      "can_undo": false,
+      "can_redo": false,
+      "auto_save_pending": false,
+      "auto_save_enabled": true,
+      "auto_save_interval": 30000,
+      "last_save_time": 0,
+      "dirty_fields": [],
+      "save_in_progress": false
+    },
+    
+    "validation_context": {
+      "validation_errors": [],
+      "warnings": [],
+      "blocking_errors": [],
+      "form_valid": true,
+      "required_fields_complete": true,
+      "validation_in_progress": false,
+      "last_validation_time": 0,
+      "auto_validate": true,
+      "validation_triggers": [
+        "blur",
+        "change",
+        "submit"
+      ],
+      "field_validations": {}
+    },
+    
+    "performance_context": {
+      "rendering_in_progress": false,
+      "heavy_operation_active": false,
+      "memory_pressure": false,
+      "throttling_active": false,
+      "fps_target": 60,
+      "current_fps": 60,
+      "frame_drops": 0,
+      "performance_budget": {
+        "memory": "100MB",
+        "cpu": "80%",
+        "network": "fast-3g"
+      },
+      "optimization_level": "normal"
+    },
+    
+    "async_operations": {
+      "active_requests": [],
+      "pending_promises": [],
+      "background_tasks": [],
+      "queue_size": 0,
+      "max_concurrent": 5,
+      "retry_attempts": {},
+      "timeout_handles": [],
+      "abort_controllers": [],
+      "request_cache": {},
+      "last_network_activity": 0
+    },
+    
+    "data_mutation": {
+      "mutations_in_progress": [],
+      "mutation_queue": [],
+      "optimistic_updates": [],
+      "rollback_stack": [],
+      "transaction_active": false,
+      "conflict_resolution": "last_write_wins",
+      "version_control": {
+        "current_version": 1,
+        "last_synced_version": 1,
+        "conflicts": []
+      },
+      "change_tracking": true
+    },
+    
+    "animation_state": {
+      "active_animations": [],
+      "animation_queue": [],
+      "transition_active": false,
+      "frame_scheduler_active": false,
+      "animation_performance": "auto",
+      "reduced_motion_active": false,
+      "gpu_acceleration": true,
+      "will_change_active": [],
+      "compositor_layers": [],
+      "animation_budget": "16ms"
+    },
+    
+    "resource_locks": {
+      "file_system_lock": false,
+      "database_lock": false,
+      "cache_lock": false,
+      "memory_lock": false,
+      "cpu_intensive_lock": false,
+      "exclusive_resources": [],
+      "shared_resources": [],
+      "resource_quotas": {
+        "memory": "unlimited",
+        "storage": "unlimited",
+        "network": "unlimited"
+      },
+      "cleanup_pending": []
+    },
+    
+    "error_recovery": {
+      "error_boundary_active": false,
+      "recovery_mode": false,
+      "fallback_ui_active": false,
+      "error_count": 0,
+      "last_error_time": 0,
+      "error_threshold": 5,
+      "recovery_strategies": [
+        "retry",
+        "fallback",
+        "reload"
+      ],
+      "circuit_breaker_open": false,
+      "health_check_status": "healthy"
+    },
+    
+    "meta_information": {
+      "context_version": "1.0.0",
+      "last_updated": 0,
+      "update_frequency": 16,
+      "context_size": 0,
+      "compression_enabled": false,
+      "persistence_enabled": true,
+      "sync_enabled": false,
+      "debug_mode": false,
+      "profiling_enabled": false,
+      "telemetry_enabled": false
+    }
+  }
+}
