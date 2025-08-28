@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BaseContainer Architecture Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        
+        .demo-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .controls button {
+            margin: 5px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #007acc;
+            color: white;
+            cursor: pointer;
+        }
+        
+        .controls button:hover {
+            background: #005a9e;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f4f8;
+            border-radius: 8px;
+            border-left: 4px solid #007acc;
+        }
+        
+        /* BaseContainer CSS Classes */
+        .base-container {
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            box-sizing: border-box;
+            position: absolute;
+        }
+        
+        .container-canvas {
+            border-color: #4CAF50;
+            background: #f9fff9;
+        }
+        
+        .container-tools {
+            border-color: #FF9800;
+            background: #fff8f0;
+        }
+        
+        .container-container {
+            border-color: #2196F3;
+            background: #f0f8ff;
+        }
+        
+        .base-container.active {
+            border-color: #ff4444;
+            border-width: 3px;
+            box-shadow: 0 0 10px rgba(255, 68, 68, 0.3);
+        }
+        
+        .base-container.locked {
+            border-style: dashed;
+            background: #f5f5f5;
+        }
+        
+        .base-container.collapsed {
+            height: 30px !important;
+            overflow: hidden;
+        }
+        
+        .base-container.draggable {
+            cursor: move;
+        }
+        
+        .base-container.resizable {
+            resize: both;
+            overflow: hidden;
+        }
+        
+        .primary-canvas {
+            border-width: 3px;
+        }
+        
+        #demo-area {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            border: 2px solid #333;
+            background: #fafafa;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-header">
+        <h1>🏗️ BaseContainer Architecture Demo</h1>
+        <p>Interactive demonstration of the reactive component architecture</p>
+    </div>
+    
+    <div class="controls">
+        <button onclick="createDemo()">🎯 Create Demo Containers</button>
+        <button onclick="activateCanvas()">✨ Activate Canvas</button>
+        <button onclick="lockTools()">🔒 Lock Tools</button>
+        <button onclick="addContent()">📝 Add Content</button>
+        <button onclick="moveComponents()">🚀 Move Components</button>
+        <button onclick="showHierarchy()">🌳 Show Hierarchy</button>
+        <button onclick="testInteraction()">🎮 Test Handler Integration</button>
+        <button onclick="clearDemo()">🗑️ Clear Demo</button>
+    </div>
+    
+    <div id="demo-area"></div>
+    
+    <div id="status" class="status">
+        <h3>📊 System Status</h3>
+        <div id="container-count">Containers: 0</div>
+        <div id="active-container">Active: None</div>
+        <div id="handler-status">Handlers: Loading...</div>
+        <pre id="hierarchy-display"></pre>
+    </div>
+
+    <!-- Load the architecture -->
+    <script src="App/Components/Developer Level/base container.js"></script>
+    <script src="ChangeLog.js"></script>
+    <script src="Interface Handler.js"></script>
+    <script src="Event Handler.js"></script>
+    <script src="io Handler.js"></script>
+    
+    <script>
+        // Demo variables
+        let demoRoot = null;
+        let canvasContainer = null;
+        let toolsContainer = null;
+        let contentContainer = null;
+        
+        // Initialize the demo
+        function initializeDemo() {
+            console.log('🎬 Initializing BaseContainer Demo...');
+            updateStatus();
+            
+            // Initialize handlers
+            setTimeout(() => {
+                document.getElementById('handler-status').textContent = 
+                    'Handlers: ✅ IO, Interface, Event, ChangeLog active';
+            }, 1000);
+        }
+        
+        function createDemo() {
+            if (demoRoot) {
+                clearDemo();
+            }
+            
+            console.log('🎯 Creating demo containers...');
+            
+            // Create root container
+            demoRoot = new BaseContainer('demo-root', null, 'container');
+            demoRoot.setPosition(50, 50)
+                   .setDimensions(700, 500)
+                   .setContent('Demo Application Root')
+                   .addCssClass('demo-root');
+            
+            // Create canvas container
+            canvasContainer = new BaseContainer('main-canvas', demoRoot, 'canvas');
+            canvasContainer.setPosition(200, 50)
+                          .setDimensions(450, 400)
+                          .setContent('🎨 Main Canvas Area')
+                          .addCssClass('primary-canvas')
+                          .setMetadata('purpose', 'drawing')
+                          .setStyle('text-align', 'center')
+                          .setStyle('line-height', '400px')
+                          .setStyle('font-size', '18px');
+            
+            // Create tools container
+            toolsContainer = new BaseContainer('tool-panel', demoRoot, 'tools');
+            toolsContainer.setPosition(20, 50)
+                         .setDimensions(150, 400)
+                         .setContent('🛠️ Tools Panel')
+                         .setStyle('text-align', 'center')
+                         .setStyle('line-height', '400px')
+                         .setStyle('font-size', '14px');
+            
+            // Create content container
+            contentContainer = new BaseContainer('content-area', demoRoot, 'container');
+            contentContainer.setPosition(200, 470)
+                           .setDimensions(450, 30)
+                           .setContent('📄 Content Area - Ready for input')
+                           .setStyle('text-align', 'center')
+                           .setStyle('line-height', '30px')
+                           .setStyle('font-size', '12px');
+            
+            // Append to demo area
+            const demoArea = document.getElementById('demo-area');
+            demoArea.appendChild(demoRoot.element);
+            demoArea.appendChild(canvasContainer.element);
+            demoArea.appendChild(toolsContainer.element);
+            demoArea.appendChild(contentContainer.element);
+            
+            console.log('✅ Demo containers created successfully!');
+            updateStatus();
+        }
+        
+        function activateCanvas() {
+            if (!canvasContainer) {
+                alert('Create demo containers first!');
+                return;
+            }
+            
+            // Deactivate all first
+            BaseContainer.getAllContainers().forEach(container => {
+                container.deactivate();
+            });
+            
+            // Activate canvas
+            canvasContainer.activate();
+            console.log('✨ Canvas activated');
+            updateStatus();
+        }
+        
+        function lockTools() {
+            if (!toolsContainer) {
+                alert('Create demo containers first!');
+                return;
+            }
+            
+            if (toolsContainer.isLocked) {
+                toolsContainer.unlock();
+                console.log('🔓 Tools unlocked');
+            } else {
+                toolsContainer.lock();
+                console.log('🔒 Tools locked');
+            }
+            updateStatus();
+        }
+        
+        function addContent() {
+            if (!canvasContainer) {
+                alert('Create demo containers first!');
+                return;
+            }
+            
+            const timestamp = new Date().toLocaleTimeString();
+            canvasContainer.setContent(`🎨 Canvas Updated at ${timestamp}`);
+            contentContainer.setContent(`📝 Last update: ${timestamp}`);
+            
+            console.log('📝 Content added to containers');
+        }
+        
+        function moveComponents() {
+            if (!canvasContainer || !toolsContainer) {
+                alert('Create demo containers first!');
+                return;
+            }
+            
+            // Animate movement
+            const startTime = Date.now();
+            const duration = 2000; // 2 seconds
+            
+            const animate = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Circular motion
+                const angle = progress * Math.PI * 2;
+                const radius = 50;
+                const centerX = 325;
+                const centerY = 250;
+                
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                
+                canvasContainer.setPosition(x, y);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    console.log('🚀 Component movement complete');
+                }
+            };
+            
+            animate();
+        }
+        
+        function showHierarchy() {
+            if (!demoRoot) {
+                alert('Create demo containers first!');
+                return;
+            }
+            
+            const hierarchy = buildHierarchyTree(demoRoot);
+            document.getElementById('hierarchy-display').textContent = hierarchy;
+            console.log('🌳 Hierarchy displayed');
+        }
+        
+        function buildHierarchyTree(container, level = 0) {
+            const indent = '  '.repeat(level);
+            let tree = `${indent}📦 ${container.containerId} (${container.type})\n`;
+            tree += `${indent}   📍 Position: (${container.position.x}, ${container.position.y})\n`;
+            tree += `${indent}   📐 Size: ${container.dimensions.width}×${container.dimensions.height}\n`;
+            tree += `${indent}   🎯 Active: ${container.isActive}, Locked: ${container.isLocked}\n`;
+            
+            for (const child of container.children) {
+                tree += buildHierarchyTree(child, level + 1);
+            }
+            
+            return tree;
+        }
+        
+        function testInteraction() {
+            if (!canvasContainer) {
+                alert('Create demo containers first!');
+                return;
+            }
+            
+            console.log('🎮 Testing handler integration...');
+            
+            // Register event handlers
+            canvasContainer.registerEventHandler('click', (event) => {
+                console.log('🖱️ Canvas clicked - Handler integration working!');
+                canvasContainer.setContent('🎯 Canvas Clicked! ✅');
+            });
+            
+            // Simulate component interaction
+            console.log('📤 Simulating component enter/exit events...');
+            
+            // Test Interface Handler integration
+            if (typeof InterfaceHandler !== 'undefined') {
+                // Simulate entering component
+                const mockEvent = {
+                    target: canvasContainer.element,
+                    type: 'mouseenter'
+                };
+                console.log('🔄 Interface Handler would detect this interaction');
+            }
+            
+            alert('🎮 Handler integration test complete! Check console for details.');
+        }
+        
+        function clearDemo() {
+            if (demoRoot) {
+                // Clean up DOM
+                const demoArea = document.getElementById('demo-area');
+                demoArea.innerHTML = '';
+                
+                // Destroy containers
+                BaseContainer.getAllContainers().forEach(container => {
+                    container.destroy();
+                });
+                
+                // Reset variables
+                demoRoot = null;
+                canvasContainer = null;
+                toolsContainer = null;
+                contentContainer = null;
+                
+                console.log('🗑️ Demo cleared');
+                updateStatus();
+            }
+        }
+        
+        function updateStatus() {
+            const containerCount = BaseContainer.getAllContainers().length;
+            const activeContainer = BaseContainer.getAllContainers()
+                .find(c => c.isActive)?.containerId || 'None';
+            
+            document.getElementById('container-count').textContent = 
+                `Containers: ${containerCount}`;
+            document.getElementById('active-container').textContent = 
+                `Active: ${activeContainer}`;
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', initializeDemo);
+        
+        // Update status periodically
+        setInterval(updateStatus, 1000);
+        
+        console.log('🎬 BaseContainer Demo Ready!');
+    </script>
+</body>
+</html>
