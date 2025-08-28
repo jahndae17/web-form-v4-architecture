@@ -299,8 +299,8 @@
         <!-- Canvas Area -->
         <div class="canvas-area">
             <div class="canvas-placeholder">
-                <h2>🎨 Drawing Canvas</h2>
-                <p>Select a tool from the left panel to start drawing.<br>
+                <h2>🎨 Form Builder Canvas</h2>
+                <p>Select the Base User Container (📦) tool to start building forms.<br>
                 Use the hamburger menu (☰) to collapse/expand the tool panel.</p>
             </div>
         </div>
@@ -455,42 +455,22 @@
             }
 
             createDrawingTools() {
-                const tools = [
-                    ToolsContainer.createToolItem('select', 'Selection', 'selector', {
-                        icon: '👆', description: 'Select and move objects', shortcut: 'V'
-                    }),
-                    ToolsContainer.createToolItem('pencil', 'Pencil', 'brush', {
-                        icon: '✏️', description: 'Basic pencil for sketching', shortcut: 'P'
-                    }),
-                    ToolsContainer.createToolItem('brush', 'Paint Brush', 'brush', {
-                        icon: '🖌️', description: 'Painting brush tool', shortcut: 'B'
-                    }),
-                    ToolsContainer.createToolItem('eraser', 'Eraser', 'brush', {
-                        icon: '🧽', description: 'Erase content', shortcut: 'E'
-                    }),
-                    ToolsContainer.createToolItem('text', 'Text Tool', 'text', {
-                        icon: '🅰️', description: 'Add text elements', shortcut: 'T'
-                    }),
-                    ToolsContainer.createToolItem('rectangle', 'Rectangle', 'shape', {
-                        icon: '🟦', description: 'Draw rectangles', shortcut: 'R'
-                    }),
-                    ToolsContainer.createToolItem('circle', 'Circle', 'shape', {
-                        icon: '🔵', description: 'Draw circles', shortcut: 'C'
-                    }),
-                    ToolsContainer.createToolItem('line', 'Line', 'shape', {
-                        icon: '📏', description: 'Draw straight lines', shortcut: 'L'
-                    })
-                ];
-
-                // Add tools to container
-                tools.forEach(tool => {
-                    this.toolsContainer.addTool(tool);
-                    console.log(`🔧 Added tool: ${tool.icon} ${tool.name}`);
+                // Add Base User Container as the primary form building tool
+                const containerTool = ToolsContainer.createToolItem('base-user-container', 'User Container', 'container', {
+                    icon: '📦', 
+                    description: 'Base User Container - Foundation for all form elements', 
+                    shortcut: 'U'
                 });
 
-                // Select default tool through proper channels
-                this.toolsContainer.selectTool('select');
-                this.toolsContainer.activateTool('select');
+                // Add the container tool to the toolbar
+                this.toolsContainer.addTool(containerTool);
+                console.log(`🔧 Added tool: ${containerTool.icon} ${containerTool.name}`);
+
+                // Select the container tool as default
+                this.toolsContainer.selectTool('base-user-container');
+                this.toolsContainer.activateTool('base-user-container');
+                
+                console.log('🔧 Base User Container tool added to toolbar');
             }
 
             setupReactiveListeners() {

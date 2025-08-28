@@ -1,220 +1,764 @@
 /**
- * DragAndDropBehavior.js - Modular behavior for drag-and-drop functionality
+ * DragAndDropBehavior.js - Graphics Handler Compliant Drag-and-Drop Behavior
  * 
- * ARCHITECTURE PURPOSE:
- * - Provides reusable drag-and-drop capabilities for any container component
- * - Integrates with Event Handler for conflict management and lock coordination
- * - Updates context system for real-time drag state communication
- * - Follows behavior composition pattern for modular functionality
- * 
- * BEHAVIOR COMPOSITION PATTERN:
- * - Can be attached to any BaseContainer or derived component
- * - Respects host container's properties and constraints
- * - Coordinates with other behaviors through Event Handler
- * - Uses ChangeLog for cross-handler state synchronization
+ * ARCHITECTURE COMPLIANCE:
+ * ✅ NO direct DOM manipulation - all visual operations through Graphics Handler
+ * ✅ NO event listeners - behavior functions called by Event Handler
+ * ✅ NO CSS files - visual specifications provided to Graphics Handler
+ * ✅ Behavior composition pattern for modular attachment
+ * ✅ Lock coordination through Event Handler
+ * ✅ ChangeLog integration for state synchronization
  */
 
-// ========================
-// BEHAVIOR CONFIGURATION PROPERTIES
-// ========================
+class DragAndDropBehavior {
+    constructor() {
+        this.hostContainer = null;
+        this.isAttached = false;
+        this.currentLockId = null;
+        
+        // Configuration with compliant defaults
+        this.config = {
+            // Core Drag Configuration
+            enabled: true,
+            dragThreshold: 5,
+            dragAxis: "both", // "both", "horizontal", "vertical", "none"
+            snapToGrid: false,
+            gridSize: { x: 20, y: 20 },
+            returnOnFailedDrop: true,
+            
+            // Visual Feedback Configuration
+            showDragPreview: true,
+            previewOpacity: 0.7,
+            previewOffset: { x: 10, y: 10 },
+            showDropZones: true,
+            dropZoneHighlight: "drag-drop-zone-highlight",
+            dragCursor: "grabbing",
+            
+            // Constraint Configuration
+            dragBounds: null, // { left, top, right, bottom }
+            validDropZones: [], // container IDs
+            invalidDropZones: [], // container IDs
+            dragFilter: null, // function(item) => boolean
+            dropFilter: null, // function(item, target) => boolean
+            
+            // Performance Configuration
+            throttleMove: 16, // ~60fps
+            useTransform: true,
+            hardwareAcceleration: true,
+            debounceDropValidation: 50
+        };
+        
+        // Runtime state
+        this.dragState = {
+            active: false,
+            item: null,
+            source: null,
+            startPosition: null,
+            currentPosition: null,
+            hoveredTarget: null,
+            validTargets: [],
+            constraints: {},
+            lockId: null
+        };
+    }
 
-// Core Drag Configuration
-// - enabled: boolean (whether drag functionality is currently active)
-// - dragThreshold: number (pixels mouse must move before drag starts)
-// - dragAxis: choose("both", "horizontal", "vertical", "none") (allowed drag directions)
-// - snapToGrid: boolean (whether to snap dragged items to grid positions)
-// - gridSize: object { x, y } (grid spacing for snap-to-grid functionality)
-// - returnOnFailedDrop: boolean (whether items return to origin if drop fails)
+    // ========================
+    // BEHAVIOR SCHEMA REGISTRATION
+    // ========================
+    
+    getBehaviorSchema() {
+        return {
+            "startDrag": {
+                "enabled": this.config.enabled,
+                "triggers": ["mousedown", "touchstart"],
+                "parameters": { 
+                    "target": "draggable_element",
+                    "threshold": this.config.dragThreshold,
+                    "graphics_handler": true
+                }
+            },
+            "updateDrag": {
+                "enabled": this.config.enabled,
+                "triggers": ["mousemove", "touchmove"],
+                "parameters": { 
+                    "position": "coordinates",
+                    "graphics_handler": true
+                }
+            },
+            "completeDrop": {
+                "enabled": this.config.enabled,
+                "triggers": ["mouseup", "touchend"],
+                "parameters": { 
+                    "target": "drop_zone",
+                    "graphics_handler": true
+                }
+            },
+            "cancelDrag": {
+                "enabled": this.config.enabled,
+                "triggers": ["keydown_Escape", "contextmenu"],
+                "parameters": { 
+                    "reason": "user_cancelled",
+                    "graphics_handler": true
+                }
+            },
+            "validateDropZone": {
+                "enabled": this.config.enabled,
+                "triggers": ["drag_enter", "drag_over"],
+                "parameters": { 
+                    "target": "potential_drop_zone",
+                    "graphics_handler": true
+                }
+            }
+        };
+    }
 
-// Visual Feedback Configuration
-// - showDragPreview: boolean (whether to show preview during drag)
-// - previewOpacity: number (0-1, opacity of drag preview)
-// - previewOffset: object { x, y } (offset of preview from cursor)
-// - showDropZones: boolean (whether to highlight valid drop zones)
-// - dropZoneHighlight: string (CSS class for drop zone highlighting)
-// - dragCursor: string (CSS cursor to show during drag operations)
+    // ========================
+    // VISUAL SCHEMA FOR GRAPHICS HANDLER
+    // ========================
+    
+    getVisualSchema() {
+        return {
+            dragPreview: {
+                opacity: this.config.previewOpacity,
+                transform: 'scale(0.95)',
+                border: '2px dashed #007acc',
+                backgroundColor: 'rgba(0, 122, 204, 0.1)',
+                borderRadius: '4px',
+                pointerEvents: 'none',
+                zIndex: 1000
+            },
+            dropZoneStyles: {
+                valid: {
+                    border: '2px solid #4caf50',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    boxShadow: '0 0 8px rgba(76, 175, 80, 0.3)'
+                },
+                invalid: {
+                    border: '2px solid #f44336',
+                    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                    boxShadow: '0 0 8px rgba(244, 67, 54, 0.3)'
+                },
+                hover: {
+                    border: '3px solid #2196f3',
+                    backgroundColor: 'rgba(33, 150, 243, 0.15)',
+                    transform: 'scale(1.02)'
+                }
+            },
+            dragStates: {
+                dragging: {
+                    cursor: this.config.dragCursor,
+                    userSelect: 'none',
+                    webkitUserSelect: 'none'
+                },
+                source: {
+                    opacity: 0.5,
+                    filter: 'grayscale(0.3)'
+                }
+            },
+            animations: {
+                dragStart: { duration: 150, easing: 'ease-out' },
+                dragEnd: { duration: 200, easing: 'ease-in-out' },
+                dropZoneEnter: { duration: 100, easing: 'ease-out' },
+                dropZoneExit: { duration: 150, easing: 'ease-in' },
+                returnToOrigin: { duration: 300, easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)' }
+            }
+        };
+    }
 
-// Constraint Configuration
-// - dragBounds: object { left, top, right, bottom } (boundaries for drag operations)
-// - validDropZones: array of strings (container IDs that can accept drops)
-// - invalidDropZones: array of strings (container IDs that explicitly reject drops)
-// - dragFilter: function (callback to determine if specific items can be dragged)
-// - dropFilter: function (callback to determine if drops are allowed)
+    // ========================
+    // BEHAVIOR LIFECYCLE METHODS
+    // ========================
+    
+    attachToBehavior(hostContainer) {
+        if (this.isAttached) {
+            throw new Error('DragAndDropBehavior already attached to a container');
+        }
+        
+        this.hostContainer = hostContainer;
+        this.isAttached = true;
+        
+        // Register behavior schema with Event Handler via ChangeLog
+        return {
+            success: true,
+            changeLog: {
+                type: 'behavior_attached',
+                behaviorType: 'DragAndDropBehavior',
+                containerId: hostContainer.id,
+                schema: this.getBehaviorSchema(),
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    configureBehavior(options) {
+        if (!this.isAttached) {
+            throw new Error('Cannot configure behavior before attachment');
+        }
+        
+        // Merge new configuration with existing
+        this.config = { ...this.config, ...options };
+        
+        // Validate configuration
+        const validation = this.validateConfiguration();
+        if (!validation.valid) {
+            throw new Error(`Invalid configuration: ${validation.errors.join(', ')}`);
+        }
+        
+        return {
+            success: true,
+            config: this.config,
+            changeLog: {
+                type: 'behavior_configured',
+                behaviorType: 'DragAndDropBehavior',
+                containerId: this.hostContainer.id,
+                config: this.config,
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    validateConfiguration() {
+        const errors = [];
+        
+        if (this.config.dragThreshold < 0) {
+            errors.push('dragThreshold must be non-negative');
+        }
+        
+        if (!['both', 'horizontal', 'vertical', 'none'].includes(this.config.dragAxis)) {
+            errors.push('dragAxis must be one of: both, horizontal, vertical, none');
+        }
+        
+        if (this.config.previewOpacity < 0 || this.config.previewOpacity > 1) {
+            errors.push('previewOpacity must be between 0 and 1');
+        }
+        
+        if (this.config.throttleMove < 1) {
+            errors.push('throttleMove must be at least 1ms');
+        }
+        
+        return {
+            valid: errors.length === 0,
+            errors: errors
+        };
+    }
 
-// Performance Configuration
-// - throttleMove: number (milliseconds to throttle mousemove events)
-// - useTransform: boolean (whether to use CSS transforms for better performance)
-// - hardwareAcceleration: boolean (whether to enable GPU acceleration)
-// - debounceDropValidation: number (milliseconds to debounce drop zone validation)
+    // ========================
+    // CORE BEHAVIOR FUNCTIONS (Called by Event Handler)
+    // ========================
+    
+    startDrag(parameters) {
+        if (!this.config.enabled || this.dragState.active) {
+            return { success: false, reason: 'drag_not_available' };
+        }
+        
+        // Validate parameters
+        if (!parameters || !parameters.target || !parameters.position) {
+            return { success: false, reason: 'invalid_parameters' };
+        }
+        
+        const { target, position, event } = parameters;
+        
+        // Check drag filter
+        if (this.config.dragFilter && !this.config.dragFilter(target)) {
+            return { success: false, reason: 'item_not_draggable' };
+        }
+        
+        // Request lock from Event Handler
+        const lockRequest = {
+            type: 'lock_request',
+            lockType: 'drag_operation',
+            priority: 'high',
+            requesterId: this.hostContainer.id,
+            lockData: {
+                draggedItem: target.id,
+                sourceContainer: this.hostContainer.id,
+                behaviorType: 'DragAndDropBehavior'
+            },
+            timeout: 30000 // 30 second timeout
+        };
+        
+        // Initialize drag state
+        this.dragState = {
+            active: true,
+            item: target,
+            source: this.hostContainer,
+            startPosition: position,
+            currentPosition: position,
+            hoveredTarget: null,
+            validTargets: this.calculateValidTargets(target),
+            constraints: this.calculateDragConstraints(target),
+            lockId: null // Will be set by Event Handler response
+        };
+        
+        return {
+            success: true,
+            lockRequest: lockRequest,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: target.id,
+                styles: this.getVisualSchema().dragStates.source,
+                classes: {
+                    add: ['dragging', 'drag-source']
+                },
+                animation: this.getVisualSchema().animations.dragStart,
+                zIndex: 999,
+                options: {
+                    priority: 'high',
+                    batch: false
+                }
+            },
+            changeLog: {
+                type: 'drag_started',
+                itemId: target.id,
+                sourceContainer: this.hostContainer.id,
+                position: position,
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    updateDrag(parameters) {
+        if (!this.dragState.active) {
+            return { success: false, reason: 'no_active_drag' };
+        }
+        
+        // Validate parameters
+        if (!parameters || !parameters.position) {
+            return { success: false, reason: 'invalid_parameters' };
+        }
+        
+        const { position, event } = parameters;
+        const previousPosition = this.dragState.currentPosition;
+        
+        // Apply axis constraints
+        const constrainedPosition = this.applyAxisConstraints(position);
+        
+        // Apply boundary constraints
+        const finalPosition = this.applyBoundaryConstraints(constrainedPosition);
+        
+        // Update drag state
+        this.dragState.currentPosition = finalPosition;
+        
+        // Check for hover target changes
+        const newHoveredTarget = this.detectHoveredTarget(finalPosition);
+        const hoveredTargetChanged = newHoveredTarget !== this.dragState.hoveredTarget;
+        
+        if (hoveredTargetChanged) {
+            this.dragState.hoveredTarget = newHoveredTarget;
+        }
+        
+        // Create preview position with offset
+        const previewPosition = {
+            x: finalPosition.x + this.config.previewOffset.x,
+            y: finalPosition.y + this.config.previewOffset.y
+        };
+        
+        // Build graphics request
+        const graphics_request = {
+            type: 'comprehensive_update',
+            componentId: this.dragState.item.id,
+            styles: {
+                ...this.getVisualSchema().dragPreview,
+                left: `${previewPosition.x}px`,
+                top: `${previewPosition.y}px`,
+                position: 'fixed'
+            },
+            options: {
+                priority: 'high',
+                batch: true
+            }
+        };
+        
+        // Add drop zone highlighting if hover target changed
+        if (hoveredTargetChanged) {
+            graphics_request.additionalRequests = this.generateDropZoneHighlighting();
+        }
+        
+        return {
+            success: true,
+            graphics_request: graphics_request,
+            changeLog: {
+                type: 'drag_moved',
+                itemId: this.dragState.item.id,
+                position: finalPosition,
+                hoveredTarget: newHoveredTarget?.id || null,
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    completeDrop(parameters) {
+        if (!this.dragState.active) {
+            return { success: false, reason: 'no_active_drag' };
+        }
+        
+        // Validate parameters
+        if (!parameters || !parameters.target) {
+            return { success: false, reason: 'invalid_parameters' };
+        }
+        
+        const { target, position } = parameters;
+        const dropSuccess = this.validateDrop(target);
+        
+        if (dropSuccess.valid) {
+            // Successful drop
+            const result = this.executeSuccessfulDrop(target, position);
+            this.resetDragState();
+            return result;
+        } else {
+            // Failed drop - return to origin if configured
+            if (this.config.returnOnFailedDrop) {
+                const result = this.returnToOrigin();
+                this.resetDragState();
+                return result;
+            } else {
+                this.resetDragState();
+                return {
+                    success: false,
+                    reason: 'drop_rejected',
+                    details: dropSuccess.reason
+                };
+            }
+        }
+    }
+    
+    cancelDrag(parameters) {
+        if (!this.dragState.active) {
+            return { success: false, reason: 'no_active_drag' };
+        }
+        
+        const { reason } = parameters;
+        
+        // Capture state before reset
+        const itemId = this.dragState.item ? this.dragState.item.id : 'unknown';
+        const sourceContainerId = this.hostContainer ? this.hostContainer.id : 'unknown';
+        
+        // Return to origin
+        const result = this.returnToOrigin();
+        this.resetDragState();
+        
+        return {
+            ...result,
+            changeLog: {
+                type: 'drag_cancelled',
+                itemId: itemId,
+                sourceContainer: sourceContainerId,
+                reason: reason || 'user_cancelled',
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    validateDropZone(parameters) {
+        const { target } = parameters;
+        const validation = this.validateDrop(target);
+        
+        const highlightStyle = validation.valid 
+            ? this.getVisualSchema().dropZoneStyles.valid
+            : this.getVisualSchema().dropZoneStyles.invalid;
+        
+        return {
+            success: true,
+            validation: validation,
+            graphics_request: {
+                type: 'style_update',
+                componentId: target.id,
+                styles: highlightStyle,
+                classes: {
+                    add: validation.valid ? ['valid-drop-zone'] : ['invalid-drop-zone'],
+                    remove: validation.valid ? ['invalid-drop-zone'] : ['valid-drop-zone']
+                },
+                animation: this.getVisualSchema().animations.dropZoneEnter
+            }
+        };
+    }
 
-// ========================
-// EVENT HANDLER INTEGRATION SPECIFICATIONS
-// ========================
+    // ========================
+    // UTILITY METHODS
+    // ========================
 
-// Lock Management Requirements:
-// - Request singleton lock from Event Handler at drag start
-// - lockType: "drag_operation" with priority based on item being dragged
-// - lockTimeout: configurable timeout for automatic lock release
-// - lockData: { draggedItem, sourceContainer, targetContainer, lockId }
-// - Handle lock conflicts: queue, override, or cancel based on priority
+    
+    calculateValidTargets(item) {
+        const validTargets = [];
+        
+        // Check configured valid drop zones
+        if (this.config.validDropZones.length > 0) {
+            this.config.validDropZones.forEach(zoneId => {
+                const zone = document.getElementById(zoneId);
+                if (zone) validTargets.push(zone);
+            });
+        }
+        
+        // Apply drop filter if configured
+        if (this.config.dropFilter) {
+            return validTargets.filter(target => this.config.dropFilter(item, target));
+        }
+        
+        return validTargets;
+    }
+    
+    calculateDragConstraints(item) {
+        const constraints = {};
+        
+        if (this.config.dragBounds) {
+            constraints.bounds = { ...this.config.dragBounds };
+        }
+        
+        if (this.config.snapToGrid) {
+            constraints.grid = { ...this.config.gridSize };
+        }
+        
+        constraints.axis = this.config.dragAxis;
+        
+        return constraints;
+    }
+    
+    applyAxisConstraints(position) {
+        if (!this.dragState.startPosition) return position;
+        
+        switch (this.config.dragAxis) {
+            case 'horizontal':
+                return {
+                    x: position.x,
+                    y: this.dragState.startPosition.y
+                };
+            case 'vertical':
+                return {
+                    x: this.dragState.startPosition.x,
+                    y: position.y
+                };
+            case 'none':
+                return this.dragState.startPosition;
+            default: // 'both'
+                return position;
+        }
+    }
+    
+    applyBoundaryConstraints(position) {
+        if (!this.config.dragBounds) return position;
+        
+        const bounds = this.config.dragBounds;
+        return {
+            x: Math.max(bounds.left, Math.min(bounds.right, position.x)),
+            y: Math.max(bounds.top, Math.min(bounds.bottom, position.y))
+        };
+    }
+    
+    detectHoveredTarget(position) {
+        // This would normally use spatial indexing for performance
+        // For now, simple detection based on configured valid targets
+        return this.dragState.validTargets.find(target => {
+            const rect = target.getBoundingClientRect();
+            return position.x >= rect.left && position.x <= rect.right &&
+                   position.y >= rect.top && position.y <= rect.bottom;
+        }) || null;
+    }
+    
+    validateDrop(target) {
+        if (!target) {
+            return { valid: false, reason: 'no_target' };
+        }
+        
+        // Check if target is in invalid drop zones
+        if (this.config.invalidDropZones.includes(target.id)) {
+            return { valid: false, reason: 'target_in_invalid_zone' };
+        }
+        
+        // Check if target is in valid drop zones (if specified)
+        if (this.config.validDropZones.length > 0 && 
+            !this.config.validDropZones.includes(target.id)) {
+            return { valid: false, reason: 'target_not_in_valid_zone' };
+        }
+        
+        // Apply drop filter if configured
+        if (this.config.dropFilter && 
+            !this.config.dropFilter(this.dragState.item, target)) {
+            return { valid: false, reason: 'drop_filter_rejected' };
+        }
+        
+        return { valid: true };
+    }
+    
+    executeSuccessfulDrop(target, position) {
+        return {
+            success: true,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: this.dragState.item.id,
+                styles: {
+                    position: 'relative',
+                    left: '0px',
+                    top: '0px',
+                    transform: 'none',
+                    opacity: '1',
+                    filter: 'none'
+                },
+                classes: {
+                    remove: ['dragging', 'drag-source', 'drag-preview']
+                },
+                animation: this.getVisualSchema().animations.dragEnd,
+                zIndex: 'auto'
+            },
+            changeLog: {
+                type: 'drag_dropped',
+                itemId: this.dragState.item.id,
+                sourceContainer: this.hostContainer.id,
+                targetContainer: target.id,
+                position: position,
+                success: true,
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    returnToOrigin() {
+        if (!this.dragState.startPosition) {
+            return { success: false, reason: 'no_origin_position' };
+        }
+        
+        return {
+            success: true,
+            graphics_request: {
+                type: 'comprehensive_update',
+                componentId: this.dragState.item.id,
+                styles: {
+                    left: `${this.dragState.startPosition.x}px`,
+                    top: `${this.dragState.startPosition.y}px`,
+                    opacity: '1',
+                    filter: 'none'
+                },
+                classes: {
+                    remove: ['dragging', 'drag-source', 'drag-preview']
+                },
+                animation: this.getVisualSchema().animations.returnToOrigin,
+                zIndex: 'auto'
+            }
+        };
+    }
+    
+    generateDropZoneHighlighting() {
+        const requests = [];
+        
+        // Clear previous highlighting
+        this.dragState.validTargets.forEach(target => {
+            if (target !== this.dragState.hoveredTarget) {
+                requests.push({
+                    type: 'style_update',
+                    componentId: target.id,
+                    classes: {
+                        remove: ['valid-drop-zone', 'invalid-drop-zone', 'hovered-drop-zone']
+                    }
+                });
+            }
+        });
+        
+        // Apply new highlighting
+        if (this.dragState.hoveredTarget) {
+            const validation = this.validateDrop(this.dragState.hoveredTarget);
+            requests.push({
+                type: 'style_update',
+                componentId: this.dragState.hoveredTarget.id,
+                styles: this.getVisualSchema().dropZoneStyles.hover,
+                classes: {
+                    add: ['hovered-drop-zone']
+                },
+                animation: this.getVisualSchema().animations.dropZoneEnter
+            });
+        }
+        
+        return requests;
+    }
+    
+    resetDragState() {
+        this.dragState = {
+            active: false,
+            item: null,
+            source: null,
+            startPosition: null,
+            currentPosition: null,
+            hoveredTarget: null,
+            validTargets: [],
+            constraints: {},
+            lockId: null
+        };
+    }
+    
+    // ========================
+    // CLEANUP METHODS
+    // ========================
+    
+    detachFromContainer() {
+        if (!this.isAttached) {
+            return { success: false, reason: 'not_attached' };
+        }
+        
+        // Cancel any active drag
+        if (this.dragState.active) {
+            this.cancelDrag({ reason: 'behavior_detached' });
+        }
+        
+        this.hostContainer = null;
+        this.isAttached = false;
+        
+        return {
+            success: true,
+            changeLog: {
+                type: 'behavior_detached',
+                behaviorType: 'DragAndDropBehavior',
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    releaseAllLocks() {
+        if (this.currentLockId) {
+            return {
+                success: true,
+                lockRelease: {
+                    type: 'lock_release',
+                    lockId: this.currentLockId,
+                    reason: 'behavior_cleanup'
+                }
+            };
+        }
+        
+        return { success: true, reason: 'no_active_locks' };
+    }
+    
+    resetBehaviorState() {
+        this.resetDragState();
+        this.currentLockId = null;
+        
+        return {
+            success: true,
+            changeLog: {
+                type: 'behavior_reset',
+                behaviorType: 'DragAndDropBehavior',
+                timestamp: Date.now()
+            }
+        };
+    }
+    
+    destroyBehavior() {
+        this.detachFromContainer();
+        this.releaseAllLocks();
+        this.resetBehaviorState();
+        
+        // Clear configuration
+        this.config = null;
+        
+        return {
+            success: true,
+            changeLog: {
+                type: 'behavior_destroyed',
+                behaviorType: 'DragAndDropBehavior',
+                timestamp: Date.now()
+            }
+        };
+    }
+}
 
-// Conflict Resolution Patterns:
-// - If another drag operation is active: queue, cancel, or override based on priority
-// - If panel toggle is active: coordinate timing to prevent visual conflicts
-// - If multiple items are being dragged: enforce maxActiveTools constraint
-// - If container is locked: respect lock and queue operation or cancel
-
-// Lock Release Conditions:
-// - Successful drop completion
-// - Failed drop with return-to-origin complete
-// - User cancels drag (ESC key or specific gesture)
-// - Timeout expiration
-// - Component destruction or behavior disabled
-
-// ========================
-// CONTEXT SYSTEM INTEGRATION
-// ========================
-
-// Context Updates During Drag Lifecycle:
-// - dragState.active: true when drag starts, false when ends
-// - dragState.item: reference to item being dragged
-// - dragState.source: source container information
-// - dragState.currentPosition: real-time drag position
-// - dragState.validTargets: array of valid drop zones
-// - dragState.hoveredTarget: currently hovered drop zone
-// - dragState.constraints: active drag constraints and boundaries
-
-// ChangeLog Integration Points:
-// - "drag_started": { itemId, sourceContainer, timestamp, lockId }
-// - "drag_moved": { itemId, position, hoveredTarget, timestamp }
-// - "drag_dropped": { itemId, sourceContainer, targetContainer, position, success, timestamp }
-// - "drag_cancelled": { itemId, sourceContainer, reason, timestamp }
-// - "lock_requested": { lockType, priority, requesterId, timestamp }
-// - "lock_released": { lockId, reason, timestamp }
-
-// ========================
-// INTERFACE HANDLER COORDINATION
-// ========================
-
-// Component Interaction Detection:
-// - Monitor when dragged items enter/exit other components
-// - Update currentComponent context when drag hovers over new containers
-// - Detect component boundaries for drop zone validation
-// - Track component visibility during drag operations
-// - Coordinate with component focus management
-
-// Real-time State Communication:
-// - Notify when drag enters component boundaries
-// - Update component hover states during drag operations
-// - Coordinate component highlighting for drop zones
-// - Manage component interaction priorities during drag
-// - Handle component state changes that affect drag validity
-
-// ========================
-// IO HANDLER INTEGRATION
-// ========================
-
-// Input Event Handling:
-// - mousedown: initiate drag if item is draggable and meets threshold
-// - mousemove: update drag position and validate drop zones
-// - mouseup: complete drop operation or cancel drag
-// - touchstart/touchmove/touchend: mobile drag support
-// - keydown: handle ESC for drag cancellation, modifier keys for constraints
-// - keyup: release modifier key constraints
-
-// Event Data Requirements:
-// - Mouse/touch coordinates for position tracking
-// - Modifier key states (Ctrl, Shift, Alt) for drag constraints
-// - Target element information for drop zone detection
-// - Event timing for performance optimization
-// - Multi-touch detection for mobile gesture support
-
-// ========================
-// BEHAVIOR LIFECYCLE METHODS
-// ========================
-
-// Initialization Methods:
-// - attachToBehavior(hostContainer): attach behavior to container
-// - configureBehavior(options): set behavior configuration
-// - validateConfiguration(): ensure configuration is valid
-// - initializeEventListeners(): set up required event listeners
-// - registerWithEventHandler(): register for lock coordination
-
-// Runtime Methods:
-// - startDrag(item, event): initiate drag operation
-// - updateDrag(position, event): update drag state and position
-// - validateDrop(targetContainer): check if drop is allowed
-// - completeDrop(targetContainer): finalize successful drop
-// - cancelDrag(reason): cancel drag and return item to origin
-// - handleLockConflict(conflictData): resolve Event Handler conflicts
-
-// Cleanup Methods:
-// - detachFromContainer(): remove behavior from host container
-// - releaseAllLocks(): release any active Event Handler locks
-// - clearEventListeners(): remove all event listeners
-// - resetBehaviorState(): reset to initial state
-// - destroyBehavior(): complete cleanup and destruction
-
-// ========================
-// INTEGRATION WITH TOOLS CONTAINER
-// ========================
-
-// ToolsContainer Property Integration:
-// - Respects ToolsContainer.dragEnabled for global drag toggle
-// - Uses ToolsContainer.dropZones for valid target determination
-// - Applies ToolsContainer.dragConstraints for boundary enforcement
-// - Honors ToolsContainer.dragPreview settings for visual feedback
-// - Implements ToolsContainer.returnOnFailedDrop behavior
-// - Enforces ToolsContainer.maxActiveTools limits during drag
-
-// Tool-Specific Behavior:
-// - Individual tool.isDraggable overrides container settings
-// - Tool.config provides tool-specific drag parameters
-// - Tool.behaviorOverrides can modify default drag behavior
-// - Tool size and position affect drag preview generation
-// - Tool type determines valid drop zones and constraints
-
-// ========================
-// ERROR HANDLING AND RECOVERY
-// ========================
-
-// Error Scenarios:
-// - Drop zone becomes invalid during drag operation
-// - Event Handler lock cannot be obtained
-// - Target container rejects drop after validation
-// - Network issues during context updates
-// - Component destruction during active drag
-// - Browser focus loss during drag operation
-
-// Recovery Strategies:
-// - Graceful fallback to return-to-origin for failed drops
-// - Automatic lock release on timeout or error
-// - Context rollback for failed operations
-// - User notification for critical errors
-// - State restoration after unexpected failures
-// - Cleanup of orphaned drag operations
-
-// ========================
-// PERFORMANCE OPTIMIZATION
-// ========================
-
-// Efficiency Measures:
-// - Throttled mouse move events to prevent performance issues
-// - Efficient drop zone detection using spatial indexing
-// - CSS transform optimization for smooth drag movement
-// - Debounced context updates to reduce overhead
-// - Lazy evaluation of drop validity checks
-// - Memory management for drag preview generation
-// - Event delegation for multiple draggable items
-
-// ========================
-// ACCESSIBILITY CONSIDERATIONS
-// ========================
-
-// Accessibility Features:
-// - Keyboard navigation support for drag operations
-// - Screen reader announcements for drag state changes
-// - High contrast mode support for drag previews
-// - Focus management during drag operations
-// - ARIA attributes for drag and drop states
-// - Alternative interaction methods for motor impairments
+// Export for module use
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = DragAndDropBehavior;
+}
