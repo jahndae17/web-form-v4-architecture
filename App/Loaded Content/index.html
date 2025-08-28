@@ -112,7 +112,7 @@
         .tool-item:hover {
             background: #4a4a4a;
             border-color: #777;
-            transform: translateY(-2px);
+            /* Transform removed - handled by Graphics Handler */
         }
 
         .tool-item.selected {
@@ -230,25 +230,17 @@
         .panel-toggle:hover {
             background: #5a5a5a;
             border-color: #888;
-            transform: translateY(-1px);
+            /* Transform removed - handled by Graphics Handler */
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
         .panel-toggle:active {
-            transform: translateY(0);
+            /* Transform removed - handled by Graphics Handler */
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
 
-        /* Animations */
-        @keyframes toolSelect {
-            0% { transform: scale(1); }
-            50% { transform: scale(0.95); }
-            100% { transform: scale(1); }
-        }
-
-        .tool-item.selecting {
-            animation: toolSelect 0.2s ease;
-        }
+        /* Tool selection animations now handled by Graphics Handler */
+        /* @keyframes toolSelect removed - Graphics Handler manages animations */
 
         /* Responsive Design */
         @media (max-width: 768px) {
@@ -324,122 +316,169 @@
 
     <!-- Load ToolsContainer Implementation -->
     <script src="../Handler/Event Handler.js"></script>
+    <script src="../Handler/Graphics Handler.js"></script>
     <script src="../Components/Developer Level/base container.js"></script>
     <script src="../Components/Developer Level/tools container.js"></script>
     <script src="../Components/Developer Level/ToolPanelToggleBehavior.js"></script>
     
     <script>
-        // Initialize ToolsContainer Demo Application
-        class ToolsContainerApp {
+        // ========================
+        // REACTIVE ARCHITECTURE IMPLEMENTATION
+        // Following Component Architecture Guidelines
+        // ========================
+        
+        // Create Mock ChangeLog for system coordination
+        class MockChangeLog {
             constructor() {
-                this.toolsContainer = null;
-                this.currentTool = null;
+                this.context = new Map();
+                this.subscriptions = new Map();
+                this.handlers = new Set();
+            }
+            
+            registerHandler(name) {
+                this.handlers.add(name);
+                console.log(`📝 ChangeLog: Handler ${name} registered`);
+            }
+            
+            startListening(callback) {
+                this.callback = callback;
+                console.log('📝 ChangeLog: Started listening');
+            }
+            
+            updateContext(path, value, action = 'update', meta = {}) {
+                this.context.set(path, value);
+                console.log(`📝 ChangeLog: Updated ${path}`);
+                
+                // Notify subscribers
+                if (this.subscriptions.has(path)) {
+                    this.subscriptions.get(path).forEach(callback => {
+                        try {
+                            callback(value);
+                        } catch (error) {
+                            console.error('ChangeLog callback error:', error);
+                        }
+                    });
+                }
+            }
+            
+            subscribe(path, callback) {
+                if (!this.subscriptions.has(path)) {
+                    this.subscriptions.set(path, []);
+                }
+                this.subscriptions.get(path).push(callback);
+                console.log(`📝 ChangeLog: Subscribed to ${path}`);
+            }
+        }
+
+        // Initialize System Architecture
+        class ReactiveToolsApplication {
+            constructor() {
+                this.systemInitialized = false;
                 this.init();
             }
 
-            init() {
-                console.log('🎨 Initializing ToolsContainer Demo Application...');
+            async init() {
+                console.log('🎨 Initializing Reactive Tools Application...');
                 
-                // Create ToolsContainer instance
-                this.toolsContainer = new ToolsContainer('drawing-tools', null, {
-                    panelPosition: 'left',
-                    isPanelOpen: true,
-                    toolLayout: 'grid',
-                    theme: 'dark',
-                    selectionMode: 'single'
-                });
+                try {
+                    // 1. Create ChangeLog for system coordination
+                    this.changeLog = new MockChangeLog();
+                    
+                    // 2. Create and initialize Event Handler
+                    this.eventHandler = new EventHandler(this.changeLog);
+                    console.log('⚡ Event Handler initialized');
+                    
+                    // 3. Create and initialize Graphics Handler with dependencies
+                    this.graphicsHandler = new GraphicsHandler(this.eventHandler, this.changeLog);
+                    await this.graphicsHandler.init();
+                    console.log('🎨 Graphics Handler initialized');
+                    
+                    // 4. Create ToolsContainer with proper architecture
+                    this.toolsContainer = new ToolsContainer('drawing-tools', null, {
+                        panelPosition: 'left',
+                        isPanelOpen: true,
+                        toolLayout: 'grid',
+                        theme: 'dark',
+                        selectionMode: 'single'
+                    });
+                    
+                    // 5. Assign DOM element to container and set Event Handler
+                    const toolsElement = document.getElementById('tools-container');
+                    if (!toolsElement) {
+                        throw new Error('Tools container element not found in DOM');
+                    }
+                    this.toolsContainer.element = toolsElement;
+                    this.toolsContainer.eventHandler = this.eventHandler;  // Assign Event Handler
+                    this.toolsContainer.graphicsHandler = this.graphicsHandler;  // Assign Graphics Handler
+                    console.log('🔧 ToolsContainer created and linked to DOM');
 
-                console.log('✅ ToolsContainer created:', this.toolsContainer.containerId);
+                    // 6. Create and attach behaviors
+                    await this.initializeBehaviors();
+                    
+                    // 7. Create tools and setup initial state
+                    this.createDrawingTools();
+                    
+                    // 8. Setup reactive listeners
+                    this.setupReactiveListeners();
+                    
+                    // 9. Initial render through proper channels
+                    await this.initialRender();
+                    
+                    this.systemInitialized = true;
+                    console.log('� Reactive architecture initialized successfully!');
+                    
+                } catch (error) {
+                    console.error('❌ System initialization failed:', error);
+                    throw error;
+                }
+            }
 
-                // Create mock ChangeLog for Event Handler (simplified for demo)
-                const mockChangeLog = {
-                    registerHandler: (name) => console.log(`ChangeLog: Handler ${name} registered`),
-                    startListening: (callback) => console.log('ChangeLog: Started listening'),
-                    updateContext: (path, value, action, meta) => console.log(`ChangeLog: Updated ${path}`)
-                };
-
-                // Create and initialize Event Handler
-                this.eventHandler = new EventHandler(mockChangeLog);
-                console.log('✅ Event Handler created');
-
-                // Assign DOM element and Event Handler to container
-                this.toolsContainer.element = document.getElementById('tools-container');
-                this.toolsContainer.eventHandler = this.eventHandler;
-
+            async initializeBehaviors() {
                 // Create and attach toggle behavior
-                this.toggleBehavior = new ToolPanelToggleBehavior({
+                this.toggleBehavior = new ToolPanelToggleBehavior();
+                
+                this.toggleBehavior.attachToContainer(this.toolsContainer, {
                     buttonEnabled: true,
                     buttonSymbols: { open: '☰', closed: '▶' },
                     buttonSize: { width: 30, height: 30 },
                     animationEnabled: true,
-                    persistState: false
+                    persistState: false,
+                    graphicsHandler: this.graphicsHandler  // Pass Graphics Handler reference
                 });
-                this.toggleBehavior.attachToContainer(this.toolsContainer);
-                console.log('✅ Toggle behavior attached');
+                console.log('🔄 Toggle behavior attached with Graphics Handler integration');
 
-                // Add panel state change listener
+                // Set up reactive panel state changes
                 this.toggleBehavior.onPanelStateChange = () => {
-                    console.log('🔄 Panel state changed, updating UI...');
-                    this.updatePanelUI();
-                    this.updateStatus();
+                    console.log('� Panel state changed, updating through Graphics Handler...');
+                    this.requestPanelUpdate();
                 };
-
-                // Create drawing tools
-                this.createDrawingTools();
-                
-                // Bind UI events
-                this.bindEvents();
-                
-                // Render tools in UI
-                this.renderTools();
-                
-                // Update status
-                this.updateStatus();
-
-                console.log('🚀 Application ready!');
             }
 
             createDrawingTools() {
                 const tools = [
                     ToolsContainer.createToolItem('select', 'Selection', 'selector', {
-                        icon: '👆',
-                        description: 'Select and move objects',
-                        shortcut: 'V'
+                        icon: '👆', description: 'Select and move objects', shortcut: 'V'
                     }),
                     ToolsContainer.createToolItem('pencil', 'Pencil', 'brush', {
-                        icon: '✏️',
-                        description: 'Basic pencil for sketching',
-                        shortcut: 'P'
+                        icon: '✏️', description: 'Basic pencil for sketching', shortcut: 'P'
                     }),
                     ToolsContainer.createToolItem('brush', 'Paint Brush', 'brush', {
-                        icon: '🖌️',
-                        description: 'Painting brush tool',
-                        shortcut: 'B'
+                        icon: '🖌️', description: 'Painting brush tool', shortcut: 'B'
                     }),
                     ToolsContainer.createToolItem('eraser', 'Eraser', 'brush', {
-                        icon: '🧽',
-                        description: 'Erase content',
-                        shortcut: 'E'
+                        icon: '🧽', description: 'Erase content', shortcut: 'E'
                     }),
                     ToolsContainer.createToolItem('text', 'Text Tool', 'text', {
-                        icon: '🅰️',
-                        description: 'Add text elements',
-                        shortcut: 'T'
+                        icon: '🅰️', description: 'Add text elements', shortcut: 'T'
                     }),
                     ToolsContainer.createToolItem('rectangle', 'Rectangle', 'shape', {
-                        icon: '🟦',
-                        description: 'Draw rectangles',
-                        shortcut: 'R'
+                        icon: '🟦', description: 'Draw rectangles', shortcut: 'R'
                     }),
                     ToolsContainer.createToolItem('circle', 'Circle', 'shape', {
-                        icon: '🔵',
-                        description: 'Draw circles',
-                        shortcut: 'C'
+                        icon: '🔵', description: 'Draw circles', shortcut: 'C'
                     }),
                     ToolsContainer.createToolItem('line', 'Line', 'shape', {
-                        icon: '📏',
-                        description: 'Draw straight lines',
-                        shortcut: 'L'
+                        icon: '📏', description: 'Draw straight lines', shortcut: 'L'
                     })
                 ];
 
@@ -449,35 +488,68 @@
                     console.log(`🔧 Added tool: ${tool.icon} ${tool.name}`);
                 });
 
-                // Select the selection tool by default
+                // Select default tool through proper channels
                 this.toolsContainer.selectTool('select');
                 this.toolsContainer.activateTool('select');
-                this.currentTool = this.toolsContainer.getTool('select');
             }
 
-            bindEvents() {
-                // Keyboard shortcuts
-                document.addEventListener('keydown', (e) => {
-                    this.handleKeyboard(e);
+            setupReactiveListeners() {
+                // Listen for tool selection changes through ChangeLog
+                this.changeLog.subscribe('tools.selection.changed', (data) => {
+                    this.handleToolSelectionChange(data);
+                });
+                
+                // Listen for panel state changes
+                this.changeLog.subscribe('panel.state.changed', (data) => {
+                    this.handlePanelStateChange(data);
+                });
+                
+                // Listen for graphics operations completion
+                this.changeLog.subscribe('current_context_meta.graphics.animations', (data) => {
+                    this.handleAnimationComplete(data);
                 });
             }
 
-            renderTools() {
+            async initialRender() {
+                // Render tools through Graphics Handler coordination
+                await this.renderToolsReactive();
+                
+                // Update status through reactive pattern
+                this.updateStatusReactive();
+                
+                // Set initial panel state through Graphics Handler
+                await this.requestPanelUpdate();
+            }
+
+            async renderToolsReactive() {
                 const toolsGrid = document.getElementById('tools-grid');
-                toolsGrid.innerHTML = '';
-
-                this.toolsContainer.tools.forEach(tool => {
-                    const toolElement = this.createToolElement(tool);
-                    toolsGrid.appendChild(toolElement);
+                if (!toolsGrid) {
+                    console.error('❌ Tools grid element not found');
+                    return;
+                }
+                
+                // Clear grid through Graphics Handler
+                await this.graphicsHandler.updateComponentStyle({
+                    componentId: 'tools-grid',
+                    styles: { innerHTML: '' }  // Clear content
                 });
+
+                // Create tool elements without direct event listeners
+                for (const tool of this.toolsContainer.tools) {
+                    const toolElement = this.createToolElementReactive(tool);
+                    toolsGrid.appendChild(toolElement);
+                }
+                
+                console.log('🎨 Tools rendered through reactive pattern');
             }
 
-            createToolElement(tool) {
+            createToolElementReactive(tool) {
                 const toolDiv = document.createElement('div');
                 toolDiv.className = 'tool-item';
                 toolDiv.dataset.toolId = tool.toolId;
+                toolDiv.id = `tool-${tool.toolId}`;  // Ensure unique ID for Graphics Handler
                 
-                // Add selection/active states
+                // Add selection/active states through CSS classes only
                 if (tool.isSelected) toolDiv.classList.add('selected');
                 if (tool.isActive) toolDiv.classList.add('active');
 
@@ -487,89 +559,145 @@
                     <div class="tool-shortcut">${tool.shortcut}</div>
                 `;
 
-                // Add click handler
-                toolDiv.addEventListener('click', () => {
-                    this.selectTool(tool.toolId);
-                });
-
-                // Add hover handler for description
+                // NO EVENT LISTENERS - Let IO Handler capture inputs
                 toolDiv.title = tool.description;
 
                 return toolDiv;
             }
 
-            selectTool(toolId) {
-                console.log(`🎯 Selecting tool: ${toolId}`);
+            // Handle tool selection through Event Handler (not direct calls)
+            async selectToolReactive(toolId) {
+                console.log(`🎯 Tool selection requested: ${toolId}`);
                 
-                // Add selection animation
-                const toolElement = document.querySelector(`[data-tool-id="${toolId}"]`);
-                if (toolElement) {
-                    toolElement.classList.add('selecting');
-                    setTimeout(() => toolElement.classList.remove('selecting'), 200);
-                }
+                // Request selection animation through Graphics Handler
+                await this.graphicsHandler.animateComponent({
+                    componentId: `tool-${toolId}`,
+                    animation: {
+                        transform: { 
+                            from: 'scale(1)', 
+                            to: 'scale(0.95)', 
+                            back: 'scale(1)' 
+                        }
+                    },
+                    duration: 200,
+                    easing: 'ease-in-out'
+                });
 
                 // Update container state
                 this.toolsContainer.selectTool(toolId);
                 this.toolsContainer.activateTool(toolId);
-                this.currentTool = this.toolsContainer.getTool(toolId);
 
-                // Re-render tools to update visual state
-                this.renderTools();
+                // Re-render through reactive pattern
+                await this.renderToolsReactive();
                 
                 // Update status
-                this.updateStatus();
+                this.updateStatusReactive();
+                
+                // Notify system of change
+                this.changeLog.updateContext('tools.selection.changed', {
+                    toolId: toolId,
+                    tool: this.toolsContainer.getTool(toolId),
+                    timestamp: Date.now()
+                });
             }
 
-            handleKeyboard(e) {
-                // Handle tool shortcuts
-                const key = e.key.toLowerCase();
-                const tool = this.toolsContainer.tools.find(t => 
-                    t.shortcut.toLowerCase() === key
-                );
-                
-                if (tool && !e.ctrlKey && !e.altKey) {
-                    e.preventDefault();
-                    this.selectTool(tool.toolId);
+            async requestPanelUpdate() {
+                try {
+                    // Request panel state change through Graphics Handler
+                    const panelWidth = this.toolsContainer.isPanelOpen ? '200px' : '0px';
+                    
+                    await this.graphicsHandler.updateComponentStyle({
+                        componentId: 'tools-container',
+                        styles: { width: panelWidth },
+                        options: { batch: false, immediate: false }
+                    });
+                    
+                    // Update CSS classes for additional styling
+                    const toolsElement = document.getElementById('tools-container');
+                    if (toolsElement) {
+                        if (this.toolsContainer.isPanelOpen) {
+                            toolsElement.classList.remove('panel-collapsed');
+                            toolsElement.classList.add('panel-open');
+                        } else {
+                            toolsElement.classList.remove('panel-open');
+                            toolsElement.classList.add('panel-collapsed');
+                        }
+                    }
+                    
+                    this.updateStatusReactive();
+                    console.log('🎨 Panel update requested through Graphics Handler');
+                } catch (error) {
+                    console.error('❌ Panel update failed:', error);
                 }
             }
 
-            updateStatus() {
-                document.getElementById('current-tool').textContent = 
-                    `Tool: ${this.currentTool ? this.currentTool.name : 'None'}`;
-                
-                document.getElementById('tool-count').textContent = 
-                    `Tools: ${this.toolsContainer.tools.length}`;
-                
-                document.getElementById('panel-status').textContent = 
-                    `Panel: ${this.toolsContainer.isPanelOpen ? 'Open' : 'Closed'}`;
-                
-                document.getElementById('selection-mode').textContent = 
-                    `Mode: ${this.toolsContainer.selectionMode}`;
+            // Event handlers for reactive architecture
+            handleToolSelectionChange(data) {
+                console.log('🔄 Tool selection changed:', data.toolId);
+                this.updateStatusReactive();
             }
 
-            updatePanelUI() {
-                const toolsElement = document.getElementById('tools-container');
-                if (this.toolsContainer.isPanelOpen) {
-                    toolsElement.classList.remove('panel-collapsed');
-                    toolsElement.classList.add('panel-open');
-                } else {
-                    toolsElement.classList.remove('panel-open');
-                    toolsElement.classList.add('panel-collapsed');
-                }
-                console.log('🔄 Panel UI updated:', this.toolsContainer.isPanelOpen ? 'Open' : 'Closed');
+            handlePanelStateChange(data) {
+                console.log('🔄 Panel state changed:', data);
+                this.updateStatusReactive();
             }
+
+            handleAnimationComplete(data) {
+                console.log('🎨 Animation completed:', data);
+            }
+
+            updateStatusReactive() {
+                const currentTool = this.toolsContainer.tools.find(t => t.isSelected);
+                
+                // Update status through DOM (acceptable for status display)
+                const elements = {
+                    currentTool: document.getElementById('current-tool'),
+                    toolCount: document.getElementById('tool-count'),
+                    panelStatus: document.getElementById('panel-status'),
+                    selectionMode: document.getElementById('selection-mode')
+                };
+                
+                // Safe updates with error checking
+                if (elements.currentTool) {
+                    elements.currentTool.textContent = `Tool: ${currentTool ? currentTool.name : 'None'}`;
+                }
+                if (elements.toolCount) {
+                    elements.toolCount.textContent = `Tools: ${this.toolsContainer.tools.length}`;
+                }
+                if (elements.panelStatus) {
+                    elements.panelStatus.textContent = `Panel: ${this.toolsContainer.isPanelOpen ? 'Open' : 'Closed'}`;
+                }
+                if (elements.selectionMode) {
+                    elements.selectionMode.textContent = `Mode: ${this.toolsContainer.selectionMode}`;
+                }
+            }
+
+            // Public API for debugging (maintaining compatibility)
+            getContainer() { return this.toolsContainer; }
+            getState() { return this.toolsContainer?.getState(); }
+            async selectTool(id) { return await this.selectToolReactive(id); }
         }
 
-        // Initialize the application when DOM is loaded
-        document.addEventListener('DOMContentLoaded', () => {
-            window.toolsApp = new ToolsContainerApp();
+        // ========================
+        // SYSTEM INITIALIZATION
+        // ========================
+
+        // Initialize the reactive application when DOM is loaded
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                window.toolsApp = new ReactiveToolsApplication();
+            } catch (error) {
+                console.error('❌ Failed to initialize application:', error);
+            }
         });
 
-        // Debug helpers for console
+        // Debug helpers for console (maintaining compatibility)
         window.debugTools = {
-            getContainer: () => window.toolsApp?.toolsContainer,
-            getState: () => window.toolsApp?.toolsContainer?.getState(),
+            getContainer: () => window.toolsApp?.getContainer(),
+            getState: () => window.toolsApp?.getState(),
             selectTool: (id) => window.toolsApp?.selectTool(id),
+            getGraphicsHandler: () => window.toolsApp?.graphicsHandler,
+            getEventHandler: () => window.toolsApp?.eventHandler,
             clearCache: () => {
                 localStorage.removeItem('panel-state');
                 console.log('✅ Panel state cache cleared');
@@ -577,7 +705,8 @@
             }
         };
 
-        console.log('🎨 ToolsContainer Demo loaded. Try debugTools.getState() in console!');
+        console.log('🎨 Reactive ToolsContainer loaded. Architecture compliant!');
+        console.log('🔧 Try debugTools.getGraphicsHandler() in console!');
     </script>
 </body>
 </html>
