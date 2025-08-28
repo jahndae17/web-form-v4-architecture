@@ -35,7 +35,272 @@ class EventHandler {
         this.lockTimeouts = new Map();
         this.maxLockDuration = 30000; // 30 seconds default
         
+        // Behavior registration system
+        this.registeredBehaviors = new Map();
+        this.triggerMappings = new Map();
+        this.elementTriggers = new Map();
+        this.functionTriggers = new Map();
+        
         this.init();
+    }
+    
+    // ========================
+    // BEHAVIOR REGISTRATION METHODS
+    // ========================
+    
+    /**
+     * Register a behavior instance with the Event Handler
+     */
+    registerBehavior(behaviorId, behaviorConfig) {
+        if (this.registeredBehaviors.has(behaviorId)) {
+            console.warn(`EventHandler: Behavior ${behaviorId} is already registered`);
+            return false;
+        }
+        
+        const config = {
+            instance: behaviorConfig.instance,
+            schema: behaviorConfig.schema,
+            version: behaviorConfig.version || '1.0.0',
+            priority: behaviorConfig.priority || 10,
+            enabled: behaviorConfig.enabled !== false
+        };
+        
+        this.registeredBehaviors.set(behaviorId, config);
+        console.log(`EventHandler: Behavior registered - ${behaviorId} v${config.version}`);
+        return true;
+    }
+    
+    /**
+     * Unregister a behavior from the Event Handler
+     */
+    unregisterBehavior(behaviorId) {
+        if (!this.registeredBehaviors.has(behaviorId)) {
+            console.warn(`EventHandler: Cannot unregister non-existent behavior ${behaviorId}`);
+            return false;
+        }
+        
+        // Remove all triggers for this behavior
+        const triggersToRemove = [];
+        for (const [triggerKey, triggerData] of this.triggerMappings) {
+            if (triggerData.behaviorId === behaviorId) {
+                triggersToRemove.push(triggerKey);
+            }
+        }
+        
+        triggersToRemove.forEach(triggerKey => {
+            this.triggerMappings.delete(triggerKey);
+        });
+        
+        // Remove behavior registration
+        this.registeredBehaviors.delete(behaviorId);
+        console.log(`EventHandler: Behavior unregistered - ${behaviorId}`);
+        return true;
+    }
+    
+    /**
+     * Register a DOM element trigger (e.g., button click)
+     */
+    registerTrigger(element, eventType, triggerName, options = {}) {
+        if (!element || !eventType || !triggerName) {
+            console.warn('EventHandler: Invalid trigger registration parameters');
+            return false;
+        }
+        
+        const triggerKey = `${eventType}:${triggerName}`;
+        const elementKey = this.getElementKey(element);
+        
+        // Create event listener
+        const eventListener = (event) => {
+            this.handleTriggerEvent(triggerKey, event, options);
+        };
+        
+        // Store trigger mapping
+        if (!this.elementTriggers.has(elementKey)) {
+            this.elementTriggers.set(elementKey, new Map());
+        }
+        
+        this.elementTriggers.get(elementKey).set(eventType, {
+            triggerName,
+            triggerKey,
+            listener: eventListener,
+            options
+        });
+        
+        // Add DOM event listener
+        element.addEventListener(eventType, eventListener);
+        
+        console.log(`EventHandler: Trigger registered - ${triggerKey} on element ${elementKey}`);
+        return true;
+    }
+    
+    /**
+     * Unregister a DOM element trigger
+     */
+    unregisterTrigger(element, eventType) {
+        const elementKey = this.getElementKey(element);
+        
+        if (!this.elementTriggers.has(elementKey)) {
+            return false;
+        }
+        
+        const elementTriggers = this.elementTriggers.get(elementKey);
+        if (!elementTriggers.has(eventType)) {
+            return false;
+        }
+        
+        const triggerData = elementTriggers.get(eventType);
+        
+        // Remove DOM event listener
+        element.removeEventListener(eventType, triggerData.listener);
+        
+        // Remove from mappings
+        elementTriggers.delete(eventType);
+        if (elementTriggers.size === 0) {
+            this.elementTriggers.delete(elementKey);
+        }
+        
+        console.log(`EventHandler: Trigger unregistered - ${triggerData.triggerKey} from element ${elementKey}`);
+        return true;
+    }
+    
+    /**
+     * Register a function trigger mapping
+     */
+    registerFunctionTrigger(triggerPattern, behaviorId, functionName, parameters = {}) {
+        const triggerKey = triggerPattern;
+        
+        if (this.functionTriggers.has(triggerKey)) {
+            console.warn(`EventHandler: Function trigger ${triggerKey} is already registered`);
+            return false;
+        }
+        
+        this.functionTriggers.set(triggerKey, {
+            behaviorId,
+            functionName,
+            parameters,
+            enabled: true
+        });
+        
+        console.log(`EventHandler: Function trigger registered - ${triggerKey} → ${behaviorId}.${functionName}()`);
+        return true;
+    }
+    
+    /**
+     * Handle a trigger event and execute mapped functions
+     */
+    async handleTriggerEvent(triggerKey, event, options = {}) {
+        console.log(`EventHandler: Trigger fired - ${triggerKey}`);
+        
+        // Find matching function triggers
+        const matchingTriggers = [];
+        for (const [pattern, triggerData] of this.functionTriggers) {
+            if (this.matchesTriggerPattern(triggerKey, pattern)) {
+                matchingTriggers.push(triggerData);
+            }
+        }
+        
+        if (matchingTriggers.length === 0) {
+            console.warn(`EventHandler: No function mappings found for trigger ${triggerKey}`);
+            return false;
+        }
+        
+        // Execute matched functions
+        const results = [];
+        for (const triggerData of matchingTriggers) {
+            try {
+                const result = await this.executeBehaviorFunction(
+                    triggerData.behaviorId,
+                    triggerData.functionName,
+                    triggerData.parameters,
+                    event
+                );
+                results.push({ success: true, result });
+            } catch (error) {
+                console.error(`EventHandler: Failed to execute ${triggerData.behaviorId}.${triggerData.functionName}():`, error);
+                results.push({ success: false, error });
+            }
+        }
+        
+        return results;
+    }
+    
+    /**
+     * Execute a behavior function
+     */
+    async executeBehaviorFunction(behaviorId, functionName, parameters, event) {
+        const behaviorConfig = this.registeredBehaviors.get(behaviorId);
+        if (!behaviorConfig || !behaviorConfig.enabled) {
+            throw new Error(`Behavior ${behaviorId} not found or disabled`);
+        }
+        
+        const behaviorInstance = behaviorConfig.instance;
+        if (!behaviorInstance[functionName]) {
+            throw new Error(`Function ${functionName} not found in behavior ${behaviorId}`);
+        }
+        
+        // Merge parameters with event data
+        const callParams = {
+            ...parameters,
+            event,
+            triggerSource: 'event_handler',
+            timestamp: Date.now()
+        };
+        
+        console.log(`EventHandler: Executing ${behaviorId}.${functionName}() with params:`, callParams);
+        
+        // Call the behavior function
+        return await behaviorInstance[functionName](callParams);
+    }
+    
+    /**
+     * Check if a trigger key matches a pattern
+     */
+    matchesTriggerPattern(triggerKey, pattern) {
+        // Exact match
+        if (triggerKey === pattern) {
+            return true;
+        }
+        
+        // Pattern matching (basic implementation)
+        if (pattern.includes('*')) {
+            const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+            return regex.test(triggerKey);
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Get a unique key for a DOM element
+     */
+    getElementKey(element) {
+        if (element.id) {
+            return `id:${element.id}`;
+        }
+        
+        if (element.className) {
+            return `class:${element.className}`;
+        }
+        
+        // Fallback to element reference
+        return `ref:${element.tagName}_${Date.now()}`;
+    }
+    
+    /**
+     * Get registered behaviors
+     */
+    getRegisteredBehaviors() {
+        return Object.fromEntries(this.registeredBehaviors);
+    }
+    
+    /**
+     * Get trigger mappings
+     */
+    getTriggerMappings() {
+        return {
+            functionTriggers: Object.fromEntries(this.functionTriggers),
+            elementTriggers: Object.fromEntries(this.elementTriggers)
+        };
     }
     
     /**

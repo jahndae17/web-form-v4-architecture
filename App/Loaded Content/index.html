@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ToolsContainer Demo - Reactive Drawing Application</title>
+    <style>
+        /* Reset and Base Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Main Application Container */
+        .app-container {
+            width: 95vw;
+            height: 90vh;
+            background: #1a1a1a;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            display: flex;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Tools Container Styles */
+        .tools-container {
+            background: #2d2d2d;
+            border-right: 2px solid #444;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            user-select: none;
+            overflow: hidden; /* Prevent content overflow when collapsed */
+        }
+
+        .tools-container.panel-open {
+            width: 200px;
+        }
+
+        .tools-container.panel-collapsed {
+            width: 0px;
+            overflow: hidden;
+        }
+
+        /* Tools Panel Header */
+        .tools-header {
+            height: 50px;
+            background: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            border-bottom: 1px solid #444;
+        }
+
+        .tools-title {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+
+        .panel-collapsed .tools-title {
+            opacity: 0;
+        }
+
+        /* Tools Grid */
+        .tools-grid {
+            flex: 1;
+            padding: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+            gap: 10px;
+            align-content: start;
+            overflow-y: auto;
+        }
+
+        .panel-collapsed .tools-grid {
+            padding: 10px 5px;
+            grid-template-columns: 1fr;
+        }
+
+        /* Tool Item */
+        .tool-item {
+            background: #3a3a3a;
+            border: 2px solid #555;
+            border-radius: 8px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+            min-height: 60px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .tool-item:hover {
+            background: #4a4a4a;
+            border-color: #777;
+            transform: translateY(-2px);
+        }
+
+        .tool-item.selected {
+            background: #4a90e2;
+            border-color: #5aa3f0;
+        }
+
+        .tool-item.active {
+            background: #27ae60;
+            border-color: #2ecc71;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.3);
+        }
+
+        .tool-icon {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .tool-name {
+            color: #fff;
+            font-size: 10px;
+            font-weight: 500;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+
+        .panel-collapsed .tool-name {
+            opacity: 0;
+        }
+
+        .tool-shortcut {
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            font-size: 8px;
+            padding: 1px 3px;
+            border-radius: 2px;
+            opacity: 0.7;
+        }
+
+        /* Canvas Area */
+        .canvas-area {
+            flex: 1;
+            background: #f5f5f5;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        .canvas-placeholder {
+            width: 80%;
+            height: 70%;
+            background: #fff;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: #888;
+        }
+
+        .canvas-placeholder h2 {
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+
+        .canvas-placeholder p {
+            font-size: 14px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: #333;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 12px;
+            border-top: 1px solid #444;
+        }
+
+        .status-item {
+            margin-right: 20px;
+        }
+
+        /* Panel Toggle Button */
+        .panel-toggle {
+            background: #4a4a4a;
+            color: #fff;
+            border: 2px solid #666;
+            border-radius: 6px;
+            cursor: pointer;
+            z-index: 1000;
+            font-size: 16px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-toggle:hover {
+            background: #5a5a5a;
+            border-color: #888;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        .panel-toggle:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Animations */
+        @keyframes toolSelect {
+            0% { transform: scale(1); }
+            50% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+
+        .tool-item.selecting {
+            animation: toolSelect 0.2s ease;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .app-container {
+                width: 100vw;
+                height: 100vh;
+                border-radius: 0;
+            }
+            
+            .tools-container.panel-open {
+                width: 150px;
+            }
+            
+            .tools-container.panel-collapsed {
+                width: 0px;
+                overflow: hidden;
+            }
+            
+            .tools-grid {
+                gap: 8px;
+                padding: 10px;
+            }
+        }
+
+        /* Scrollbar Styling */
+        .tools-grid::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .tools-grid::-webkit-scrollbar-track {
+            background: #2d2d2d;
+        }
+
+        .tools-grid::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 3px;
+        }
+
+        .tools-grid::-webkit-scrollbar-thumb:hover {
+            background: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Tools Container -->
+        <div id="tools-container" class="tools-container panel-open">
+            <div class="tools-header">
+                <div class="tools-title">Drawing Tools</div>
+            </div>
+            <div class="tools-grid" id="tools-grid">
+                <!-- Tools will be dynamically added here -->
+            </div>
+        </div>
+
+        <!-- Canvas Area -->
+        <div class="canvas-area">
+            <div class="canvas-placeholder">
+                <h2>🎨 Drawing Canvas</h2>
+                <p>Select a tool from the left panel to start drawing.<br>
+                Use the hamburger menu (☰) to collapse/expand the tool panel.</p>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-item" id="current-tool">Tool: None</div>
+            <div class="status-item" id="tool-count">Tools: 0</div>
+            <div class="status-item" id="panel-status">Panel: Open</div>
+            <div class="status-item" id="selection-mode">Mode: Single</div>
+        </div>
+    </div>
+
+    <!-- Load ToolsContainer Implementation -->
+    <script src="../Handler/Event Handler.js"></script>
+    <script src="../Components/Developer Level/base container.js"></script>
+    <script src="../Components/Developer Level/tools container.js"></script>
+    <script src="../Components/Developer Level/ToolPanelToggleBehavior.js"></script>
+    
+    <script>
+        // Initialize ToolsContainer Demo Application
+        class ToolsContainerApp {
+            constructor() {
+                this.toolsContainer = null;
+                this.currentTool = null;
+                this.init();
+            }
+
+            init() {
+                console.log('🎨 Initializing ToolsContainer Demo Application...');
+                
+                // Create ToolsContainer instance
+                this.toolsContainer = new ToolsContainer('drawing-tools', null, {
+                    panelPosition: 'left',
+                    isPanelOpen: true,
+                    toolLayout: 'grid',
+                    theme: 'dark',
+                    selectionMode: 'single'
+                });
+
+                console.log('✅ ToolsContainer created:', this.toolsContainer.containerId);
+
+                // Create mock ChangeLog for Event Handler (simplified for demo)
+                const mockChangeLog = {
+                    registerHandler: (name) => console.log(`ChangeLog: Handler ${name} registered`),
+                    startListening: (callback) => console.log('ChangeLog: Started listening'),
+                    updateContext: (path, value, action, meta) => console.log(`ChangeLog: Updated ${path}`)
+                };
+
+                // Create and initialize Event Handler
+                this.eventHandler = new EventHandler(mockChangeLog);
+                console.log('✅ Event Handler created');
+
+                // Assign DOM element and Event Handler to container
+                this.toolsContainer.element = document.getElementById('tools-container');
+                this.toolsContainer.eventHandler = this.eventHandler;
+
+                // Create and attach toggle behavior
+                this.toggleBehavior = new ToolPanelToggleBehavior({
+                    buttonEnabled: true,
+                    buttonSymbols: { open: '☰', closed: '▶' },
+                    buttonSize: { width: 30, height: 30 },
+                    animationEnabled: true,
+                    persistState: false
+                });
+                this.toggleBehavior.attachToContainer(this.toolsContainer);
+                console.log('✅ Toggle behavior attached');
+
+                // Add panel state change listener
+                this.toggleBehavior.onPanelStateChange = () => {
+                    console.log('🔄 Panel state changed, updating UI...');
+                    this.updatePanelUI();
+                    this.updateStatus();
+                };
+
+                // Create drawing tools
+                this.createDrawingTools();
+                
+                // Bind UI events
+                this.bindEvents();
+                
+                // Render tools in UI
+                this.renderTools();
+                
+                // Update status
+                this.updateStatus();
+
+                console.log('🚀 Application ready!');
+            }
+
+            createDrawingTools() {
+                const tools = [
+                    ToolsContainer.createToolItem('select', 'Selection', 'selector', {
+                        icon: '👆',
+                        description: 'Select and move objects',
+                        shortcut: 'V'
+                    }),
+                    ToolsContainer.createToolItem('pencil', 'Pencil', 'brush', {
+                        icon: '✏️',
+                        description: 'Basic pencil for sketching',
+                        shortcut: 'P'
+                    }),
+                    ToolsContainer.createToolItem('brush', 'Paint Brush', 'brush', {
+                        icon: '🖌️',
+                        description: 'Painting brush tool',
+                        shortcut: 'B'
+                    }),
+                    ToolsContainer.createToolItem('eraser', 'Eraser', 'brush', {
+                        icon: '🧽',
+                        description: 'Erase content',
+                        shortcut: 'E'
+                    }),
+                    ToolsContainer.createToolItem('text', 'Text Tool', 'text', {
+                        icon: '🅰️',
+                        description: 'Add text elements',
+                        shortcut: 'T'
+                    }),
+                    ToolsContainer.createToolItem('rectangle', 'Rectangle', 'shape', {
+                        icon: '🟦',
+                        description: 'Draw rectangles',
+                        shortcut: 'R'
+                    }),
+                    ToolsContainer.createToolItem('circle', 'Circle', 'shape', {
+                        icon: '🔵',
+                        description: 'Draw circles',
+                        shortcut: 'C'
+                    }),
+                    ToolsContainer.createToolItem('line', 'Line', 'shape', {
+                        icon: '📏',
+                        description: 'Draw straight lines',
+                        shortcut: 'L'
+                    })
+                ];
+
+                // Add tools to container
+                tools.forEach(tool => {
+                    this.toolsContainer.addTool(tool);
+                    console.log(`🔧 Added tool: ${tool.icon} ${tool.name}`);
+                });
+
+                // Select the selection tool by default
+                this.toolsContainer.selectTool('select');
+                this.toolsContainer.activateTool('select');
+                this.currentTool = this.toolsContainer.getTool('select');
+            }
+
+            bindEvents() {
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    this.handleKeyboard(e);
+                });
+            }
+
+            renderTools() {
+                const toolsGrid = document.getElementById('tools-grid');
+                toolsGrid.innerHTML = '';
+
+                this.toolsContainer.tools.forEach(tool => {
+                    const toolElement = this.createToolElement(tool);
+                    toolsGrid.appendChild(toolElement);
+                });
+            }
+
+            createToolElement(tool) {
+                const toolDiv = document.createElement('div');
+                toolDiv.className = 'tool-item';
+                toolDiv.dataset.toolId = tool.toolId;
+                
+                // Add selection/active states
+                if (tool.isSelected) toolDiv.classList.add('selected');
+                if (tool.isActive) toolDiv.classList.add('active');
+
+                toolDiv.innerHTML = `
+                    <div class="tool-icon">${tool.icon}</div>
+                    <div class="tool-name">${tool.name}</div>
+                    <div class="tool-shortcut">${tool.shortcut}</div>
+                `;
+
+                // Add click handler
+                toolDiv.addEventListener('click', () => {
+                    this.selectTool(tool.toolId);
+                });
+
+                // Add hover handler for description
+                toolDiv.title = tool.description;
+
+                return toolDiv;
+            }
+
+            selectTool(toolId) {
+                console.log(`🎯 Selecting tool: ${toolId}`);
+                
+                // Add selection animation
+                const toolElement = document.querySelector(`[data-tool-id="${toolId}"]`);
+                if (toolElement) {
+                    toolElement.classList.add('selecting');
+                    setTimeout(() => toolElement.classList.remove('selecting'), 200);
+                }
+
+                // Update container state
+                this.toolsContainer.selectTool(toolId);
+                this.toolsContainer.activateTool(toolId);
+                this.currentTool = this.toolsContainer.getTool(toolId);
+
+                // Re-render tools to update visual state
+                this.renderTools();
+                
+                // Update status
+                this.updateStatus();
+            }
+
+            handleKeyboard(e) {
+                // Handle tool shortcuts
+                const key = e.key.toLowerCase();
+                const tool = this.toolsContainer.tools.find(t => 
+                    t.shortcut.toLowerCase() === key
+                );
+                
+                if (tool && !e.ctrlKey && !e.altKey) {
+                    e.preventDefault();
+                    this.selectTool(tool.toolId);
+                }
+            }
+
+            updateStatus() {
+                document.getElementById('current-tool').textContent = 
+                    `Tool: ${this.currentTool ? this.currentTool.name : 'None'}`;
+                
+                document.getElementById('tool-count').textContent = 
+                    `Tools: ${this.toolsContainer.tools.length}`;
+                
+                document.getElementById('panel-status').textContent = 
+                    `Panel: ${this.toolsContainer.isPanelOpen ? 'Open' : 'Closed'}`;
+                
+                document.getElementById('selection-mode').textContent = 
+                    `Mode: ${this.toolsContainer.selectionMode}`;
+            }
+
+            updatePanelUI() {
+                const toolsElement = document.getElementById('tools-container');
+                if (this.toolsContainer.isPanelOpen) {
+                    toolsElement.classList.remove('panel-collapsed');
+                    toolsElement.classList.add('panel-open');
+                } else {
+                    toolsElement.classList.remove('panel-open');
+                    toolsElement.classList.add('panel-collapsed');
+                }
+                console.log('🔄 Panel UI updated:', this.toolsContainer.isPanelOpen ? 'Open' : 'Closed');
+            }
+        }
+
+        // Initialize the application when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            window.toolsApp = new ToolsContainerApp();
+        });
+
+        // Debug helpers for console
+        window.debugTools = {
+            getContainer: () => window.toolsApp?.toolsContainer,
+            getState: () => window.toolsApp?.toolsContainer?.getState(),
+            selectTool: (id) => window.toolsApp?.selectTool(id),
+            clearCache: () => {
+                localStorage.removeItem('panel-state');
+                console.log('✅ Panel state cache cleared');
+                return 'Cache cleared successfully';
+            }
+        };
+
+        console.log('🎨 ToolsContainer Demo loaded. Try debugTools.getState() in console!');
+    </script>
+</body>
+</html>

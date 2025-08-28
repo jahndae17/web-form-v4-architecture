@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Button UI Verification Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            background: #2d2d2d;
+            border: 2px solid #444;
+            border-radius: 8px;
+            width: 200px;
+            height: 400px;
+            position: relative;
+            margin: 20px;
+            color: white;
+            display: inline-block;
+        }
+        .test-header {
+            background: #333;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .test-results {
+            background: white;
+            color: black;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            font-family: monospace;
+            white-space: pre-line;
+        }
+        .panel-toggle {
+            background: #555;
+            color: white;
+            border: 1px solid #777;
+            border-radius: 4px;
+            cursor: pointer;
+            z-index: 100;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .panel-toggle:hover {
+            background: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎛️ Button UI Verification Test</h1>
+    <p>This test verifies that the ToolPanelToggleBehavior creates toggle buttons correctly in a browser environment.</p>
+
+    <div id="test-containers">
+        <!-- Test containers will be created here -->
+    </div>
+
+    <div class="test-results" id="test-results">
+        Running verification tests...
+    </div>
+
+    <!-- Load the components -->
+    <script src="App/Components/Developer Level/base container.js"></script>
+    <script src="App/Components/Developer Level/tools container.js"></script>
+    <script src="App/Components/Developer Level/ToolPanelToggleBehavior.js"></script>
+
+    <script>
+        async function runButtonUIVerification() {
+            const results = [];
+            
+            function log(message) {
+                results.push(message);
+                document.getElementById('test-results').textContent = results.join('\\n');
+                console.log(message);
+            }
+
+            log('=== Button UI Verification Test (Browser Environment) ===\\n');
+
+            try {
+                // Test 1: Create multiple test containers with different configurations
+                log('Test 1: Creating test containers with toggle behaviors...');
+                
+                const testConfigs = [
+                    { id: 'left-panel', position: 'left', open: true, symbols: { open: '◄', closed: '►' } },
+                    { id: 'right-panel', position: 'right', open: false, symbols: { open: '►', closed: '◄' } },
+                    { id: 'top-panel', position: 'top', open: true, symbols: { open: '▲', closed: '▼' } },
+                    { id: 'bottom-panel', position: 'bottom', open: false, symbols: { open: '▼', closed: '▲' } }
+                ];
+
+                const containers = [];
+                const behaviors = [];
+
+                for (const config of testConfigs) {
+                    // Create container element
+                    const containerElement = document.createElement('div');
+                    containerElement.className = 'test-container';
+                    containerElement.id = `container-${config.id}`;
+                    
+                    const header = document.createElement('div');
+                    header.className = 'test-header';
+                    header.textContent = `${config.position.toUpperCase()} Panel`;
+                    containerElement.appendChild(header);
+                    
+                    document.getElementById('test-containers').appendChild(containerElement);
+
+                    // Create ToolsContainer
+                    const container = new ToolsContainer(config.id, null, {
+                        panelPosition: config.position,
+                        isPanelOpen: config.open
+                    });
+                    
+                    // Assign the DOM element
+                    container.element = containerElement;
+                    
+                    // Create and attach behavior
+                    const behavior = new ToolPanelToggleBehavior({
+                        buttonEnabled: true,
+                        buttonSymbols: config.symbols,
+                        buttonSize: { width: 28, height: 28 },
+                        animationEnabled: true,
+                        persistState: false
+                    });
+                    
+                    behavior.attachToContainer(container);
+                    
+                    containers.push(container);
+                    behaviors.push(behavior);
+                    
+                    log(`✅ Created ${config.position} panel (${config.open ? 'open' : 'closed'})`);
+                }
+
+                // Test 2: Verify buttons were created
+                log('\\nTest 2: Verifying toggle buttons were created...');
+                let buttonsCreated = 0;
+                
+                behaviors.forEach((behavior, index) => {
+                    if (behavior.toggleButton) {
+                        buttonsCreated++;
+                        const button = behavior.toggleButton;
+                        const config = testConfigs[index];
+                        
+                        log(`✅ Button ${index + 1}: ID="${button.id}", Symbol="${button.textContent}"`);
+                        log(`   Position: ${button.style.left}, ${button.style.top}`);
+                        log(`   Size: ${button.style.width} x ${button.style.height}`);
+                        log(`   ARIA expanded: ${button.getAttribute('aria-expanded')}`);
+                    } else {
+                        log(`❌ Button ${index + 1}: Not created`);
+                    }
+                });
+                
+                log(`\\nButtons created: ${buttonsCreated}/${behaviors.length}`);
+
+                // Test 3: Test button interactions
+                log('\\nTest 3: Testing button click interactions...');
+                
+                behaviors.forEach((behavior, index) => {
+                    if (behavior.toggleButton) {
+                        const initialState = behavior.hostContainer.isPanelOpen;
+                        
+                        // Add click handler for testing
+                        behavior.toggleButton.onclick = () => {
+                            const result = behavior.togglePanel();
+                            const newState = behavior.hostContainer.isPanelOpen;
+                            log(`🎛️ Panel ${index + 1} toggled: ${initialState} → ${newState} (${result ? 'success' : 'failed'})`);
+                        };
+                        
+                        log(`✅ Button ${index + 1}: Click handler attached`);
+                    }
+                });
+
+                // Test 4: Visual positioning verification
+                log('\\nTest 4: Verifying button positions are correct...');
+                
+                behaviors.forEach((behavior, index) => {
+                    const button = behavior.toggleButton;
+                    const container = behavior.hostContainer;
+                    const config = testConfigs[index];
+                    
+                    if (button && container) {
+                        const rect = button.getBoundingClientRect();
+                        const containerRect = container.element.getBoundingClientRect();
+                        
+                        log(`📍 Button ${index + 1} (${config.position}): `);
+                        log(`   Absolute: ${Math.round(rect.left)}, ${Math.round(rect.top)}`);
+                        log(`   Relative to container: ${Math.round(rect.left - containerRect.left)}, ${Math.round(rect.top - containerRect.top)}`);
+                        log(`   Visible: ${rect.width > 0 && rect.height > 0}`);
+                    }
+                });
+
+                // Test 5: Accessibility verification
+                log('\\nTest 5: Checking accessibility attributes...');
+                
+                let accessibilityScore = 0;
+                behaviors.forEach((behavior, index) => {
+                    const button = behavior.toggleButton;
+                    if (button) {
+                        const hasAriaLabel = !!button.getAttribute('aria-label');
+                        const hasAriaExpanded = button.hasAttribute('aria-expanded');
+                        const hasCorrectRole = button.tagName.toLowerCase() === 'button';
+                        
+                        if (hasAriaLabel) accessibilityScore++;
+                        if (hasAriaExpanded) accessibilityScore++;
+                        if (hasCorrectRole) accessibilityScore++;
+                        
+                        log(`♿ Button ${index + 1} accessibility:`);
+                        log(`   ARIA label: ${hasAriaLabel ? '✅' : '❌'} "${button.getAttribute('aria-label')}"`);
+                        log(`   ARIA expanded: ${hasAriaExpanded ? '✅' : '❌'} "${button.getAttribute('aria-expanded')}"`);
+                        log(`   Correct element: ${hasCorrectRole ? '✅' : '❌'} <${button.tagName.toLowerCase()}>`);
+                    }
+                });
+                
+                log(`\\nAccessibility score: ${accessibilityScore}/${behaviors.length * 3} checks passed`);
+
+                // Final summary
+                log('\\n=== Button UI Verification Summary ===');
+                log(`✅ Test containers created: ${containers.length}`);
+                log(`✅ Toggle behaviors attached: ${behaviors.length}`);
+                log(`✅ Toggle buttons created: ${buttonsCreated}`);
+                log(`✅ Click handlers attached: ${buttonsCreated}`);
+                log(`✅ Accessibility: ${Math.round((accessibilityScore / (behaviors.length * 3)) * 100)}% compliant`);
+                log('\\n🎉 All browser UI tests completed!');
+                log('\\n💡 Try clicking the toggle buttons to test panel functionality!');
+
+                // Store references for console debugging
+                window.debugButtonUI = {
+                    containers,
+                    behaviors,
+                    toggleAll: () => behaviors.forEach(b => b.togglePanel()),
+                    getButtonInfo: (index) => {
+                        const behavior = behaviors[index];
+                        if (behavior && behavior.toggleButton) {
+                            return {
+                                id: behavior.toggleButton.id,
+                                text: behavior.toggleButton.textContent,
+                                position: {
+                                    left: behavior.toggleButton.style.left,
+                                    top: behavior.toggleButton.style.top
+                                },
+                                size: {
+                                    width: behavior.toggleButton.style.width,
+                                    height: behavior.toggleButton.style.height
+                                },
+                                attributes: {
+                                    'aria-label': behavior.toggleButton.getAttribute('aria-label'),
+                                    'aria-expanded': behavior.toggleButton.getAttribute('aria-expanded')
+                                }
+                            };
+                        }
+                        return null;
+                    }
+                };
+
+            } catch (error) {
+                log(`❌ Test failed: ${error.message}`);
+                log(`Stack: ${error.stack}`);
+            }
+        }
+
+        // Run the test when page loads
+        document.addEventListener('DOMContentLoaded', runButtonUIVerification);
+    </script>
+</body>
+</html>
