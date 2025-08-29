@@ -909,11 +909,70 @@ class GraphicsHandler {
                 case this.contextPaths.styles:
                     await this.handleStyleContextChange(change);
                     break;
+                case 'current_context_meta.style_updates':
+                    // Handle MovableBehavior and other behavior style updates
+                    await this.handleBehaviorStyleUpdate(change);
+                    break;
                 default:
                     console.log(`🎨 Unhandled context path: ${path}`);
             }
         } catch (error) {
             console.error('🎨 Context change handling failed:', error);
+        }
+    }
+
+    /**
+     * Handle behavior style updates from MovableBehavior and other behaviors
+     * @param {Object} change - Style update data from behaviors
+     */
+    async handleBehaviorStyleUpdate(change) {
+        console.log(`🎨 Processing behavior style update for component: ${change.componentId}`);
+        
+        try {
+            const componentId = change.componentId;
+            const element = document.getElementById(componentId);
+            
+            if (!element) {
+                console.warn(`🎨 Element not found for behavior style update: ${componentId}`);
+                return;
+            }
+
+            if (change.styles) {
+                // Apply styles directly to the element
+                for (const [property, value] of Object.entries(change.styles)) {
+                    element.style[property] = value;
+                }
+                console.log(`🎨 Applied behavior styles to ${componentId}:`, change.styles);
+            }
+
+            if (change.classes) {
+                // Apply class changes
+                if (change.classes.add) {
+                    change.classes.add.forEach(className => element.classList.add(className));
+                }
+                if (change.classes.remove) {
+                    change.classes.remove.forEach(className => element.classList.remove(className));
+                }
+                console.log(`🎨 Applied behavior classes to ${componentId}:`, change.classes);
+            }
+
+            if (change.attributes) {
+                // Apply attribute changes
+                for (const [attr, value] of Object.entries(change.attributes)) {
+                    element.setAttribute(attr, value);
+                }
+                console.log(`🎨 Applied behavior attributes to ${componentId}:`, change.attributes);
+            }
+
+            // Also persist to graphics state for tracking
+            await this.persistGraphicsState('behavior_style_update', {
+                componentId,
+                changes: change,
+                timestamp: Date.now()
+            });
+
+        } catch (error) {
+            console.error(`🎨 Failed to process behavior style update:`, error);
         }
     }
 

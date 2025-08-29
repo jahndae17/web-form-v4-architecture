@@ -1,0 +1,1 @@
+* Confirm Each object/control has a property dictionary

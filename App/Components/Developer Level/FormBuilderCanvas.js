@@ -654,7 +654,8 @@ class FormBuilderCanvas extends BaseContainer {
                     title: formElement.properties.title || 'User Container',
                     description: formElement.properties.description || 'Container for user interactive elements',
                     allowedChildTypes: formElement.properties.allowedChildTypes || ['input', 'button', 'text'],
-                    changeLog: this.changeLog // Pass ChangeLog reference
+                    changeLog: this.changeLog, // Pass ChangeLog reference
+                    existingElement: containerDiv // Pass the DOM element that's already in the canvas
                 };
                 
                 const container = new BaseUserContainer(formElement.id, this, containerConfig);
