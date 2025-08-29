@@ -95,6 +95,7 @@ class FormBuilderCanvas extends BaseContainer {
             this.setupLayoutManager();
             this.setupDropZoneHandling();
             this.setupFormValidation();
+            this.setupCanvasClickHandler();
             
             // Configure visual schema for Graphics Handler
             const visualSchema = this.getCanvasVisualSchema();
@@ -162,6 +163,76 @@ class FormBuilderCanvas extends BaseContainer {
         this.validationRules.set('minLength', (element, minLength) => {
             return !element.value || element.value.length >= minLength;
         });
+    }
+
+    setupCanvasClickHandler() {
+        // Add click handler to canvas element for deselection when clicking empty areas
+        if (this.element) {
+            this.element.addEventListener('click', (event) => {
+                // Only handle direct canvas clicks (not clicks on child elements)
+                if (event.target === this.element) {
+                    // Prevent all event propagation and default behavior to avoid drag/drop interference
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.stopImmediatePropagation();
+                    
+                    // Additional check: make sure this isn't part of a drag operation
+                    if (!this.isDragInProgress) {
+                        console.log('🎯 Canvas empty area clicked - deselecting all containers');
+                        this.deselectAllContainers();
+                    } else {
+                        console.log('🚫 Ignoring canvas click during drag operation');
+                    }
+                }
+            }, true); // Use capture phase to handle before drag/drop events
+            
+            // Track drag state to prevent deselection during drags
+            this.isDragInProgress = false;
+            this.element.addEventListener('dragover', () => { this.isDragInProgress = true; });
+            this.element.addEventListener('dragleave', () => { this.isDragInProgress = false; });
+            this.element.addEventListener('drop', () => { 
+                this.isDragInProgress = false;
+                // Small delay to prevent immediate click handler from firing after drop
+                setTimeout(() => { this.isDragInProgress = false; }, 100);
+            });
+            
+            console.log('✅ Canvas click handler for deselection setup complete');
+        }
+    }
+
+    deselectAllContainers() {
+        // Deselect all containers that have SelectableBehavior
+        if (this.componentInstances) {
+            let deselectedCount = 0;
+            
+            this.componentInstances.forEach((container, elementId) => {
+                if (container.selectableBehavior && container.isSelected) {
+                    const result = container.selectableBehavior.deselectAll({});
+                    if (result.success && result.graphics_request) {
+                        // Send graphics request to Graphics Handler if available
+                        if (window.toolsApp && window.toolsApp.graphicsHandler) {
+                            console.log(`📤 Sending deselection graphics request for ${container.containerId}`);
+                            const request = result.graphics_request;
+                            
+                            // Format the request according to Graphics Handler expectations
+                            const styleUpdate = {
+                                componentId: request.componentId,
+                                styles: request.finalStyles,
+                                classes: request.classes,
+                                attributes: request.attributes
+                            };
+                            
+                            window.toolsApp.graphicsHandler.updateComponentStyle(styleUpdate);
+                            deselectedCount++;
+                        }
+                    }
+                }
+            });
+            
+            if (deselectedCount > 0) {
+                console.log(`✅ Successfully deselected ${deselectedCount} container(s)`);
+            }
+        }
     }
 
     // ========================
@@ -591,6 +662,36 @@ class FormBuilderCanvas extends BaseContainer {
                 // Store the component instance reference
                 this.componentInstances = this.componentInstances || new Map();
                 this.componentInstances.set(formElement.id, container);
+                
+                // Link the instance to the DOM element for click handling
+                // Use the containerDiv that's actually in the DOM, not container.element
+                containerDiv._baseUserContainer = container;
+                
+                // Add click event listener to the DOM element for selection behavior
+                containerDiv.addEventListener('click', (event) => {
+                    if (container.handleClick) {
+                        const result = container.handleClick(event);
+                        if (result.success) {
+                            console.log(`🎯 Selection triggered for ${container.containerId}:`, result);
+                            
+                            // Send graphics request to Graphics Handler if available
+                            if (result.graphics_request && window.toolsApp && window.toolsApp.graphicsHandler) {
+                                console.log('📤 Sending graphics request to Graphics Handler');
+                                const request = result.graphics_request;
+                                
+                                // Format the request according to Graphics Handler expectations
+                                const styleUpdate = {
+                                    componentId: request.componentId,
+                                    styles: request.finalStyles,
+                                    classes: request.classes,
+                                    attributes: request.attributes
+                                };
+                                
+                                window.toolsApp.graphicsHandler.updateComponentStyle(styleUpdate);
+                            }
+                        }
+                    }
+                });
                 
                 console.log(`✅ BaseUserContainer instance created: ${formElement.id} with clean styling`);
                 return true;
