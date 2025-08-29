@@ -77,14 +77,32 @@ class MovableBehavior {
             return { success: false, error: 'Movement not allowed in current mode' };
         }
         
-        // Store initial position
-        this.startPosition = {
+        // Get element's current CSS position
+        const element = this.component.element;
+        const computedStyle = window.getComputedStyle(element);
+        const currentLeft = parseInt(computedStyle.left) || 0;
+        const currentTop = parseInt(computedStyle.top) || 0;
+        
+        // Store mouse position and element offset
+        this.mouseStartPosition = {
             x: parameters.position.x,
             y: parameters.position.y,
             timestamp: Date.now()
         };
         
-        this.currentPosition = { ...this.startPosition };
+        // Store element's initial CSS position
+        this.elementStartPosition = {
+            x: currentLeft,
+            y: currentTop
+        };
+        
+        // Calculate offset between mouse and element
+        this.mouseOffset = {
+            x: this.mouseStartPosition.x - currentLeft,
+            y: this.mouseStartPosition.y - currentTop
+        };
+        
+        this.currentPosition = { ...this.mouseStartPosition };
         this.movementDelta = { x: 0, y: 0 };
         this.isMoving = false; // Not moving yet, just tracking
         
@@ -106,7 +124,7 @@ class MovableBehavior {
             },
             attributes: {
                 'data-movement-state': 'ready',
-                'data-movement-start': this.startPosition.timestamp
+                'data-movement-start': this.mouseStartPosition.timestamp
             },
             options: {
                 priority: 'high',
@@ -122,7 +140,8 @@ class MovableBehavior {
                 property: 'movementState',
                 value: 'ready',
                 metadata: {
-                    startPosition: this.startPosition,
+                    mouseStartPosition: this.mouseStartPosition,
+                    elementStartPosition: this.elementStartPosition,
                     threshold: this.minimumMovementThreshold,
                     timestamp: Date.now()
                 }
@@ -135,14 +154,14 @@ class MovableBehavior {
      * Only triggers actual movement if delta exceeds 8px threshold
      */
     performMove(parameters) {
-        if (!this.startPosition || !this._isAllowedInCurrentMode()) {
+        if (!this.mouseStartPosition || !this.elementStartPosition || !this._isAllowedInCurrentMode()) {
             return { success: false, error: 'Movement not initialized or not allowed' };
         }
         
-        // Calculate movement delta
+        // Calculate movement delta from mouse start position
         this.movementDelta = {
-            x: parameters.position.x - this.startPosition.x,
-            y: parameters.position.y - this.startPosition.y
+            x: parameters.position.x - this.mouseStartPosition.x,
+            y: parameters.position.y - this.mouseStartPosition.y
         };
         
         const totalDelta = Math.sqrt(
@@ -179,15 +198,20 @@ class MovableBehavior {
             }
         }
         
-        // Update current position
+        // Calculate new element position based on movement delta
+        let targetPosition = {
+            x: this.elementStartPosition.x + this.movementDelta.x,
+            y: this.elementStartPosition.y + this.movementDelta.y
+        };
+        
+        // Update current mouse position
         this.currentPosition = {
             x: parameters.position.x,
             y: parameters.position.y,
             timestamp: Date.now()
         };
         
-        // Apply grid snapping if enabled
-        let targetPosition = { ...this.currentPosition };
+        // Apply grid snapping if enabled (to element position, not mouse position)
         if (this.snapToGrid) {
             targetPosition = this._snapToGrid(targetPosition);
         }
@@ -252,7 +276,13 @@ class MovableBehavior {
      */
     endMove(parameters) {
         const wasMoving = this.isMoving;
-        const finalPosition = parameters.finalPosition || this.currentPosition;
+        const finalMousePosition = parameters.finalPosition || this.currentPosition;
+        
+        // Calculate the element's final position by subtracting the mouse offset
+        const finalElementPosition = finalMousePosition ? {
+            x: finalMousePosition.x - this.mouseOffset.x,
+            y: finalMousePosition.y - this.mouseOffset.y
+        } : null;
         
         // Clean up movement state
         this.isMoving = false;
@@ -273,10 +303,10 @@ class MovableBehavior {
             return this._resetMovementState();
         }
         
-        // Apply final grid snapping
-        let snappedPosition = finalPosition;
-        if (this.snapToGrid && finalPosition) {
-            snappedPosition = this._snapToGrid(finalPosition);
+        // Apply final grid snapping to element position
+        let snappedPosition = finalElementPosition;
+        if (this.snapToGrid && finalElementPosition) {
+            snappedPosition = this._snapToGrid(finalElementPosition);
         }
         
         // Create movement completion graphics request

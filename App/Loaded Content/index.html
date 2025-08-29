@@ -316,6 +316,8 @@
     <!-- Load ToolsContainer Implementation -->
     <script src="../Handler/Event Handler.js"></script>
     <script src="../Handler/Graphics Handler.js"></script>
+    <script src="../Handler/Errors/SuddenPositionChangeDetector.js"></script>
+    <script src="../Handler/Errors/SlingShotErrorDetector.js"></script>
     <script src="../Components/Developer Level/base container.js"></script>
     <script src="../Components/Developer Level/FormBuilderCanvas.js"></script>
     <script src="../Components/Developer Level/DragAndDropBehavior.js"></script>
@@ -414,12 +416,20 @@
                     await this.graphicsHandler.init();
                     console.log('🎨 Graphics Handler initialized');
                     
-                    // 4. Create root application container
+                    // 4. Initialize Error Detection System
+                    this.positionDetector = new SuddenPositionChangeDetector();
+                    this.slingshotDetector = new SlingShotErrorDetector(this.positionDetector);
+                    
+                    // Start error monitoring
+                    this.positionDetector.startMonitoring(this.changeLog);
+                    this.slingshotDetector.startMonitoring(this.changeLog);
+                    console.log('🔍 Error Detection System initialized and monitoring');
+                    
+                    // 5. Create root application container
                     this.rootContainer = new BaseContainer('app-root', null, 'application');
                     console.log('🏠 Root application container created');
                     
-                    // 5. Create ToolsContainer as child of root
-                    // 5. Create ToolsContainer as child of root
+                    // 6. Create ToolsContainer as child of root
                     this.toolsContainer = new ToolsContainer('tools-container', this.rootContainer, {
                         panelPosition: 'left',
                         isPanelOpen: true,
@@ -431,7 +441,7 @@
                         dropZones: ['canvas-area']
                     });
                     
-                    // 5. Assign DOM element to container and set Event Handler
+                    // 7. Assign DOM element to container and set Event Handler
                     const toolsElement = document.getElementById('tools-container');
                     if (!toolsElement) {
                         throw new Error('Tools container element not found in DOM');
@@ -441,7 +451,7 @@
                     this.toolsContainer.graphicsHandler = this.graphicsHandler;  // Assign Graphics Handler
                     console.log('🔧 ToolsContainer created and linked to DOM');
 
-                    // 6. Create FormBuilderCanvas as child of root
+                    // 8. Create FormBuilderCanvas as child of root
                     this.formBuilderCanvas = new FormBuilderCanvas('canvas-area', this.rootContainer, {
                         backgroundColor: '#f8f9fa',
                         borderStyle: '2px dashed #dee2e6',
