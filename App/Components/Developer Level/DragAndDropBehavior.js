@@ -585,7 +585,10 @@ class DragAndDropBehavior {
         // Check container objects for advanced validation
         if (this.config.dropTargetContainers.length > 0) {
             const targetContainer = this.config.dropTargetContainers.find(container => 
-                container.id === target.id || container.element === target
+                container.id === target.id || 
+                container.containerId === target.id || 
+                container.element === target ||
+                container.element?.id === target.id
             );
             
             if (targetContainer && typeof targetContainer.canAcceptDrop === 'function') {
@@ -617,7 +620,10 @@ class DragAndDropBehavior {
         // Check if we have a container object that can handle the drop
         if (this.config.dropTargetContainers.length > 0) {
             const targetContainer = this.config.dropTargetContainers.find(container => 
-                container.id === target.id || container.element === target
+                container.id === target.id || 
+                container.containerId === target.id || 
+                container.element === target ||
+                container.element?.id === target.id
             );
             
             if (targetContainer && typeof targetContainer.handleDrop === 'function') {

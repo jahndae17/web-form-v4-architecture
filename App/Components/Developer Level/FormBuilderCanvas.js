@@ -31,7 +31,7 @@ class FormBuilderCanvas extends BaseContainer {
         
         // Override BaseContainer properties with FormBuilderCanvas specific ones
         this.allowedChildTypes = ['base-user-container', 'form-element', 'container'];
-        this.allowedToolTypes = ['container', 'form', 'drawing'];
+        this.allowedToolTypes = ['container', 'form', 'drawing', 'base-user-container'];
         this.maxChildren = options.maxChildren || 50;
         this.isResizable = options.isResizable !== undefined ? options.isResizable : true;
         this.isDraggable = options.isDraggable !== undefined ? options.isDraggable : false;
@@ -278,19 +278,17 @@ class FormBuilderCanvas extends BaseContainer {
                 timestamp: Date.now()
             });
             
+            // Create DOM element directly since Graphics Handler doesn't process children arrays
+            this.createFormElementDOM(formElement);
+            
             return {
                 success: true,
                 element: formElement,
                 graphics_request: {
-                    type: 'comprehensive_update',
+                    type: 'style_update',
                     componentId: this.containerId,
                     styles: this.getCanvasVisualSchema().container,
-                    children: [{
-                        id: elementData.id,
-                        type: 'form_element',
-                        position: finalPosition,
-                        content: this.generateElementHTML(formElement)
-                    }]
+                    options: { immediate: true }
                 },
                 changeLog: {
                     type: 'form_element_added',
@@ -335,6 +333,9 @@ class FormBuilderCanvas extends BaseContainer {
             elementData: element,
             timestamp: Date.now()
         });
+        
+        // Remove DOM element
+        this.removeFormElementDOM(elementId);
         
         return {
             success: true,
@@ -485,6 +486,77 @@ class FormBuilderCanvas extends BaseContainer {
             this.operationHistory.shift();
         }
     }
+    
+    createFormElementDOM(formElement) {
+        // Create DOM element directly for visual rendering
+        try {
+            const canvasElement = this.element || document.getElementById(this.containerId);
+            if (!canvasElement) {
+                console.error('❌ Canvas element not found for DOM creation:', this.containerId);
+                return false;
+            }
+            
+            // Generate the HTML content
+            const elementHTML = this.generateElementHTML(formElement);
+            
+            // Create wrapper div
+            const elementDiv = document.createElement('div');
+            elementDiv.id = `form_element_${formElement.id}`;
+            elementDiv.innerHTML = elementHTML;
+            elementDiv.style.position = 'absolute';
+            elementDiv.style.left = formElement.position.x + 'px';
+            elementDiv.style.top = formElement.position.y + 'px';
+            elementDiv.style.zIndex = '100';
+            elementDiv.style.background = 'white';
+            elementDiv.style.border = '1px solid #007acc';
+            elementDiv.style.borderRadius = '4px';
+            elementDiv.style.padding = '10px';
+            elementDiv.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+            elementDiv.style.minWidth = '150px';
+            elementDiv.style.minHeight = '50px';
+            elementDiv.style.cursor = 'pointer';
+            elementDiv.style.userSelect = 'none';
+            
+            // Add hover effects
+            elementDiv.addEventListener('mouseenter', () => {
+                elementDiv.style.borderColor = '#0056b3';
+                elementDiv.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)';
+            });
+            
+            elementDiv.addEventListener('mouseleave', () => {
+                elementDiv.style.borderColor = '#007acc';
+                elementDiv.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+            });
+            
+            // Add to canvas
+            canvasElement.appendChild(elementDiv);
+            
+            console.log(`✅ DOM element created for form element: ${formElement.id}`);
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Error creating DOM element:', error);
+            return false;
+        }
+    }
+    
+    removeFormElementDOM(elementId) {
+        // Remove DOM element from canvas
+        try {
+            const domElement = document.getElementById(`form_element_${elementId}`);
+            if (domElement) {
+                domElement.remove();
+                console.log(`✅ DOM element removed for form element: ${elementId}`);
+                return true;
+            } else {
+                console.warn(`⚠️ DOM element not found for form element: ${elementId}`);
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Error removing DOM element:', error);
+            return false;
+        }
+    }
 
     // ========================
     // DROP ZONE BEHAVIOR (Called by DragAndDropBehavior)
@@ -577,6 +649,11 @@ class FormBuilderCanvas extends BaseContainer {
     }
     
     clearCanvas() {
+        // Clear all DOM elements first
+        this.formElements.forEach((element) => {
+            this.removeFormElementDOM(element.id);
+        });
+        
         this.formElements.clear();
         this.updateFormSchema();
         
