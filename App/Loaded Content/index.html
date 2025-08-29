@@ -198,6 +198,40 @@
             margin-right: 20px;
         }
 
+        /* Mode Toggle Button */
+        .mode-toggle-btn {
+            background: #007acc;
+            color: #fff;
+            border: 1px solid #005a99;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            margin-right: 0;
+        }
+
+        .mode-toggle-btn:hover {
+            background: #005a99;
+            border-color: #003d66;
+            transform: translateY(-1px);
+        }
+
+        .mode-toggle-btn:active {
+            transform: translateY(0);
+        }
+
+        .mode-toggle-btn.preview-mode {
+            background: #28a745;
+            border-color: #1e7e34;
+        }
+
+        .mode-toggle-btn.preview-mode:hover {
+            background: #1e7e34;
+            border-color: #155724;
+        }
+
         /* Panel Toggle Button */
         .panel-toggle {
             background: #4a4a4a;
@@ -299,7 +333,10 @@
             <div class="status-item" id="current-tool">Tool: None</div>
             <div class="status-item" id="tool-count">Tools: 0</div>
             <div class="status-item" id="panel-status">Panel: Open</div>
-            <div class="status-item" id="selection-mode">Mode: Single</div>
+            <div class="status-item" id="app-mode">App Mode: Design</div>
+            <button class="status-item mode-toggle-btn" id="mode-toggle" title="Toggle between Design and Preview modes">
+                🎨 Switch to Preview
+            </button>
         </div>
     </div>
 
@@ -311,6 +348,11 @@
     <script src="../Components/Developer Level/DragAndDropBehavior.js"></script>
     <script src="../Components/Developer Level/tools container.js"></script>
     <script src="../Components/Developer Level/ToolPanelToggleBehavior.js"></script>
+    <script src="../Components/User Level/Base User Container/BaseUserContainer.js"></script>
+    <script src="../Components/User Level/Base User Container/ResizeableBehavior.js"></script>
+    <script src="../Components/User Level/Base User Container/SelectableBehavior.js"></script>
+    <script src="../Components/User Level/Base User Container/BaseUserContainerBehavior.js"></script>
+    <script src="../Components/User Level/Base User Container/BaseUserContainerFactory.js"></script>
     
     <script>
         // ========================
@@ -352,6 +394,14 @@
                 }
             }
             
+            setValue(path, value) {
+                this.updateContext(path, value, 'set');
+            }
+            
+            getValue(path, defaultValue = null) {
+                return this.context.get(path) ?? defaultValue;
+            }
+            
             subscribe(path, callback) {
                 if (!this.subscriptions.has(path)) {
                     this.subscriptions.set(path, []);
@@ -374,6 +424,12 @@
                 try {
                     // 1. Create ChangeLog for system coordination
                     this.changeLog = new MockChangeLog();
+                    
+                    // Initialize global application mode state
+                    this.changeLog.setValue('application.mode', 'design');
+                    this.changeLog.setValue('application.mode_switching_enabled', true);
+                    this.changeLog.setValue('application.available_modes', ['design', 'preview']);
+                    console.log('🎛️ Global application mode initialized: design');
                     
                     // 2. Create and initialize Event Handler
                     this.eventHandler = new EventHandler(this.changeLog);
@@ -420,7 +476,7 @@
                         allowOverlap: false,
                         validDropSources: ['tools-container'],
                         allowedToolTypes: ['container', 'form', 'drawing', 'base-user-container']
-                    });
+                    }, this.changeLog);
                     
                     // Assign DOM element and handlers to canvas
                     const canvasElement = document.getElementById('canvas-area');
@@ -650,13 +706,15 @@
                 // Note: Tool selection state now managed by Event Handler
                 // For status display, we'll show first tool or none
                 const currentTool = this.toolsContainer.tools.length > 0 ? this.toolsContainer.tools[0] : null;
+                const currentMode = this.getCurrentMode();
                 
                 // Update status through DOM (acceptable for status display)
                 const elements = {
                     currentTool: document.getElementById('current-tool'),
                     toolCount: document.getElementById('tool-count'),
                     panelStatus: document.getElementById('panel-status'),
-                    selectionMode: document.getElementById('selection-mode')
+                    appMode: document.getElementById('app-mode'),
+                    modeToggle: document.getElementById('mode-toggle')
                 };
                 
                 // Safe updates with error checking
@@ -669,9 +727,81 @@
                 if (elements.panelStatus) {
                     elements.panelStatus.textContent = `Panel: ${this.toolsContainer.isPanelOpen ? 'Open' : 'Closed'}`;
                 }
-                if (elements.selectionMode) {
-                    elements.selectionMode.textContent = `Mode: ${this.toolsContainer.selectionMode}`;
+                if (elements.appMode) {
+                    elements.appMode.textContent = `App Mode: ${currentMode.charAt(0).toUpperCase() + currentMode.slice(1)}`;
                 }
+                if (elements.modeToggle) {
+                    const isDesignMode = currentMode === 'design';
+                    elements.modeToggle.textContent = isDesignMode ? '🔍 Switch to Preview' : '🎨 Switch to Design';
+                    elements.modeToggle.className = `status-item mode-toggle-btn ${isDesignMode ? '' : 'preview-mode'}`;
+                }
+            }
+
+            // ========================
+            // GLOBAL MODE MANAGEMENT
+            // ========================
+
+            /**
+             * Set global application mode
+             * @param {string} newMode - 'design' or 'preview'
+             */
+            setApplicationMode(newMode) {
+                const availableModes = this.changeLog.getValue('application.available_modes', ['design', 'preview']);
+                
+                if (!availableModes.includes(newMode)) {
+                    console.error(`❌ Invalid mode: ${newMode}. Available modes:`, availableModes);
+                    return { success: false, error: `Invalid mode: ${newMode}` };
+                }
+
+                const oldMode = this.changeLog.getValue('application.mode');
+                this.changeLog.setValue('application.mode', newMode);
+                
+                console.log(`🎛️ Application mode changed: ${oldMode} → ${newMode}`);
+                
+                // Update status bar to show current mode
+                this.updateStatusReactive();
+                
+                // Trigger global mode change event for all components
+                this.eventHandler.triggerGlobal?.('mode-changed', {
+                    oldMode,
+                    newMode,
+                    timestamp: Date.now()
+                });
+
+                return {
+                    success: true,
+                    oldMode,
+                    newMode,
+                    changeLog: {
+                        type: 'application_mode_changed',
+                        oldMode,
+                        newMode,
+                        timestamp: Date.now()
+                    }
+                };
+            }
+
+            /**
+             * Get current application mode
+             */
+            getCurrentMode() {
+                return this.changeLog.getValue('application.mode', 'design');
+            }
+
+            /**
+             * Toggle between design and preview modes
+             */
+            toggleApplicationMode() {
+                const currentMode = this.getCurrentMode();
+                const newMode = currentMode === 'design' ? 'preview' : 'design';
+                return this.setApplicationMode(newMode);
+            }
+
+            /**
+             * Check if mode switching is enabled
+             */
+            isModeSwitchingEnabled() {
+                return this.changeLog.getValue('application.mode_switching_enabled', true);
             }
 
             // Public API for debugging (maintaining compatibility)
@@ -688,6 +818,27 @@
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 window.toolsApp = new ReactiveToolsApplication();
+                
+                // Add mode toggle button event listener
+                setTimeout(() => {
+                    const modeToggleBtn = document.getElementById('mode-toggle');
+                    if (modeToggleBtn) {
+                        modeToggleBtn.addEventListener('click', () => {
+                            if (window.toolsApp?.isModeSwitchingEnabled()) {
+                                const result = window.toolsApp.toggleApplicationMode();
+                                if (result.success) {
+                                    console.log(`🎛️ Mode toggled: ${result.oldMode} → ${result.newMode}`);
+                                } else {
+                                    console.error('❌ Mode toggle failed:', result.error);
+                                }
+                            } else {
+                                console.warn('⚠️ Mode switching is disabled');
+                            }
+                        });
+                        console.log('🎛️ Mode toggle button event listener added');
+                    }
+                }, 100); // Small delay to ensure DOM is ready
+                
             } catch (error) {
                 console.error('❌ Failed to initialize application:', error);
             }

@@ -25,9 +25,12 @@
     }
 
 class FormBuilderCanvas extends BaseContainer {
-    constructor(id, parent = null, options = {}) {
+    constructor(id, parent = null, options = {}, changeLog = null) {
         // Call parent constructor with correct parameters
         super(id, parent, 'form-builder-canvas');
+        
+        // Store ChangeLog reference for component creation
+        this.changeLog = changeLog;
         
         // Override BaseContainer properties with FormBuilderCanvas specific ones
         this.allowedChildTypes = ['base-user-container', 'form-element', 'container'];
@@ -496,7 +499,12 @@ class FormBuilderCanvas extends BaseContainer {
                 return false;
             }
             
-            // Generate the HTML content
+            // Check if this is a component type that needs actual instance creation
+            if (formElement.type === 'base-user-container') {
+                return this.createBaseUserContainerInstance(formElement);
+            }
+            
+            // Generate the HTML content for other element types
             const elementHTML = this.generateElementHTML(formElement);
             
             // Create wrapper div
@@ -536,6 +544,86 @@ class FormBuilderCanvas extends BaseContainer {
             
         } catch (error) {
             console.error('❌ Error creating DOM element:', error);
+            return false;
+        }
+    }
+    
+    createBaseUserContainerInstance(formElement) {
+        try {
+            const canvasElement = this.element || document.getElementById(this.containerId);
+            if (!canvasElement) {
+                console.error('❌ Canvas element not found for component creation:', this.containerId);
+                return false;
+            }
+            
+            // Create DOM element for the BaseUserContainer
+            const containerDiv = document.createElement('div');
+            containerDiv.id = formElement.id;
+            containerDiv.style.position = 'absolute';
+            containerDiv.style.left = formElement.position.x + 'px';
+            containerDiv.style.top = formElement.position.y + 'px';
+            containerDiv.style.zIndex = '100';
+            containerDiv.style.minWidth = '200px';
+            containerDiv.style.minHeight = '100px';
+            containerDiv.style.border = '2px solid #007acc';
+            containerDiv.style.borderRadius = '4px';
+            containerDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+            containerDiv.style.padding = '10px';
+            containerDiv.innerHTML = `
+                <div style="font-weight: bold; margin-bottom: 5px;">📦 User Container</div>
+                <div style="color: #666; font-size: 12px;">Global Mode: <span id="mode-${formElement.id}">Design</span></div>
+                <div style="margin-top: 5px; padding: 10px; border: 1px dashed #ccc; min-height: 30px;">
+                    Drop form elements here...
+                </div>
+            `;
+            
+            // Add to canvas first so DOM element exists
+            canvasElement.appendChild(containerDiv);
+            
+            // Create BaseUserContainer instance directly (without factory for now)
+            if (typeof BaseUserContainer !== 'undefined') {
+                const containerConfig = {
+                    userType: 'interactive',
+                    formRole: 'container',
+                    title: formElement.properties.title || 'User Container',
+                    description: formElement.properties.description || 'Container for user interactive elements',
+                    allowedChildTypes: formElement.properties.allowedChildTypes || ['input', 'button', 'text'],
+                    changeLog: this.changeLog // Pass ChangeLog reference
+                };
+                
+                const container = new BaseUserContainer(formElement.id, this, containerConfig);
+                
+                // Store the component instance reference
+                this.componentInstances = this.componentInstances || new Map();
+                this.componentInstances.set(formElement.id, container);
+                
+                // Update mode display
+                const updateModeDisplay = () => {
+                    const modeSpan = document.getElementById(`mode-${formElement.id}`);
+                    if (modeSpan) {
+                        const currentMode = container.getCurrentMode();
+                        modeSpan.textContent = currentMode.charAt(0).toUpperCase() + currentMode.slice(1);
+                        modeSpan.style.color = currentMode === 'design' ? '#007acc' : '#28a745';
+                    }
+                };
+                
+                // Initial mode display update
+                updateModeDisplay();
+                
+                // Subscribe to mode changes
+                if (this.changeLog) {
+                    this.changeLog.subscribe('application.mode', updateModeDisplay);
+                }
+                
+                console.log(`✅ BaseUserContainer instance created: ${formElement.id} with global mode integration`);
+                return true;
+            } else {
+                console.error('❌ BaseUserContainer class not available');
+                return false;
+            }
+            
+        } catch (error) {
+            console.error('❌ Error creating BaseUserContainer instance:', error);
             return false;
         }
     }
