@@ -43,7 +43,7 @@ class FormBuilderCanvas extends BaseContainer {
         this.snapToGrid = options.snapToGrid !== undefined ? options.snapToGrid : true;
         this.gridSize = options.gridSize || { x: 20, y: 20 };
         this.showGrid = options.showGrid !== undefined ? options.showGrid : true;
-        this.allowOverlap = options.allowOverlap !== undefined ? options.allowOverlap : false;
+        this.allowOverlap = options.allowOverlap !== undefined ? options.allowOverlap : true;
         this.autoLayout = options.autoLayout !== undefined ? options.autoLayout : false;
         
         // Drop zone configuration
@@ -565,17 +565,12 @@ class FormBuilderCanvas extends BaseContainer {
             containerDiv.style.zIndex = '100';
             containerDiv.style.minWidth = '200px';
             containerDiv.style.minHeight = '100px';
-            containerDiv.style.border = '2px solid #007acc';
-            containerDiv.style.borderRadius = '4px';
-            containerDiv.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
-            containerDiv.style.padding = '10px';
-            containerDiv.innerHTML = `
-                <div style="font-weight: bold; margin-bottom: 5px;">📦 User Container</div>
-                <div style="color: #666; font-size: 12px;">Global Mode: <span id="mode-${formElement.id}">Design</span></div>
-                <div style="margin-top: 5px; padding: 10px; border: 1px dashed #ccc; min-height: 30px;">
-                    Drop form elements here...
-                </div>
-            `;
+            containerDiv.style.backgroundColor = 'white';
+            containerDiv.style.borderRadius = '8px';
+            containerDiv.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+            containerDiv.style.border = 'none';
+            containerDiv.style.padding = '0';
+            // No innerHTML - plain white container with no text
             
             // Add to canvas first so DOM element exists
             canvasElement.appendChild(containerDiv);
@@ -597,25 +592,7 @@ class FormBuilderCanvas extends BaseContainer {
                 this.componentInstances = this.componentInstances || new Map();
                 this.componentInstances.set(formElement.id, container);
                 
-                // Update mode display
-                const updateModeDisplay = () => {
-                    const modeSpan = document.getElementById(`mode-${formElement.id}`);
-                    if (modeSpan) {
-                        const currentMode = container.getCurrentMode();
-                        modeSpan.textContent = currentMode.charAt(0).toUpperCase() + currentMode.slice(1);
-                        modeSpan.style.color = currentMode === 'design' ? '#007acc' : '#28a745';
-                    }
-                };
-                
-                // Initial mode display update
-                updateModeDisplay();
-                
-                // Subscribe to mode changes
-                if (this.changeLog) {
-                    this.changeLog.subscribe('application.mode', updateModeDisplay);
-                }
-                
-                console.log(`✅ BaseUserContainer instance created: ${formElement.id} with global mode integration`);
+                console.log(`✅ BaseUserContainer instance created: ${formElement.id} with clean styling`);
                 return true;
             } else {
                 console.error('❌ BaseUserContainer class not available');
@@ -660,18 +637,7 @@ class FormBuilderCanvas extends BaseContainer {
             };
         }
         
-        // Check position constraints
-        if (dropContext.position && !this.allowOverlap) {
-            const wouldOverlap = this.checkForOverlap(draggedItem, dropContext.position);
-            if (wouldOverlap) {
-                return {
-                    allowed: false,
-                    reason: 'position_occupied',
-                    message: 'This position is already occupied'
-                };
-            }
-        }
-        
+        // Always allow drops since overlap is enabled
         return {
             allowed: true,
             snapPosition: this.calculateElementPosition(dropContext.position)
@@ -702,20 +668,27 @@ class FormBuilderCanvas extends BaseContainer {
     }
     
     checkForOverlap(item, position) {
-        // Simple overlap detection
+        // Helper function to get numeric size values
+        const getNumericSize = (size, defaultValue) => {
+            if (typeof size === 'number') return size;
+            if (typeof size === 'string' && !isNaN(parseFloat(size))) return parseFloat(size);
+            return defaultValue;
+        };
+        
+        // Simple overlap detection with proper size handling
         const itemBounds = {
             left: position.x,
             top: position.y,
-            right: position.x + (item.size?.width || 100),
-            bottom: position.y + (item.size?.height || 50)
+            right: position.x + getNumericSize(item.size?.width, 200),
+            bottom: position.y + getNumericSize(item.size?.height, 100)
         };
         
         return Array.from(this.formElements.values()).some(element => {
             const elementBounds = {
                 left: element.position.x,
                 top: element.position.y,
-                right: element.position.x + (element.size?.width || 100),
-                bottom: element.position.y + (element.size?.height || 50)
+                right: element.position.x + getNumericSize(element.size?.width, 200),
+                bottom: element.position.y + getNumericSize(element.size?.height, 100)
             };
             
             return !(itemBounds.right < elementBounds.left ||

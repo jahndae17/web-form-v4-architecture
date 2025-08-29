@@ -250,6 +250,15 @@ class DragAndDropBehavior {
     // ========================
     
     startDrag(parameters) {
+        // Check if drag operations are allowed in current mode
+        if (!this._isAllowedInCurrentMode()) {
+            return { 
+                success: false, 
+                reason: 'drag_disabled_in_preview_mode',
+                message: 'Drag and drop is only available in design mode'
+            };
+        }
+        
         if (!this.config.enabled || this.dragState.active) {
             return { success: false, reason: 'drag_not_available' };
         }
@@ -818,6 +827,63 @@ class DragAndDropBehavior {
         }
         
         return { success: true, reason: 'no_active_locks' };
+    }
+    
+    /**
+     * Check if drag operations are allowed in current application mode
+     * Drag and drop should only be available in design mode, not preview mode
+     */
+    _isAllowedInCurrentMode() {
+        try {
+            // Try to get global mode from multiple sources
+            
+            // 1. Check if there's a global toolsApp (ReactiveToolsApplication)
+            if (typeof window !== 'undefined' && window.toolsApp && 
+                typeof window.toolsApp.getCurrentMode === 'function') {
+                const currentMode = window.toolsApp.getCurrentMode();
+                console.log(`🎯 DragAndDropBehavior: Current mode from toolsApp: ${currentMode}`);
+                return currentMode === 'design';
+            }
+            
+            // 2. Check if there's a global ReactiveToolsApplication
+            if (typeof window !== 'undefined' && window.reactiveToolsApp && 
+                typeof window.reactiveToolsApp.getCurrentMode === 'function') {
+                const currentMode = window.reactiveToolsApp.getCurrentMode();
+                console.log(`🎯 DragAndDropBehavior: Current mode from reactiveToolsApp: ${currentMode}`);
+                return currentMode === 'design';
+            }
+            
+            // 3. Check if host container has ChangeLog access
+            if (this.hostContainer && this.hostContainer.changeLog && 
+                typeof this.hostContainer.changeLog.getValue === 'function') {
+                const currentMode = this.hostContainer.changeLog.getValue('application.mode');
+                console.log(`🎯 DragAndDropBehavior: Current mode from host ChangeLog: ${currentMode}`);
+                return currentMode === 'design';
+            }
+            
+            // 4. Check if there's a global ChangeLog
+            if (typeof window !== 'undefined' && window.changeLog && 
+                typeof window.changeLog.getValue === 'function') {
+                const currentMode = window.changeLog.getValue('application.mode');
+                console.log(`🎯 DragAndDropBehavior: Current mode from global ChangeLog: ${currentMode}`);
+                return currentMode === 'design';
+            }
+            
+            // 5. Fallback: check if we're in Node.js environment (always allow for testing)
+            if (typeof window === 'undefined') {
+                console.log(`🎯 DragAndDropBehavior: Node.js environment, allowing drag`);
+                return true;
+            }
+            
+            // 6. Default fallback: allow drag in design mode (assume design mode if unknown)
+            console.warn('⚠️ DragAndDropBehavior: Could not determine application mode, defaulting to allow drag');
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Error checking application mode for drag operations:', error);
+            // Error case: default to allowing drag to avoid breaking functionality
+            return true;
+        }
     }
     
     resetBehaviorState() {
