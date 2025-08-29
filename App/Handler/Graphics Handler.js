@@ -674,6 +674,9 @@ class GraphicsHandler {
             if (handlesContainer && handlesContainer.parentElement) {
                 container = handlesContainer.parentElement;
                 console.log(`🔍 Found container via handles container: ${container.id}`);
+                console.log(`🔍 Container element:`, container);
+                console.log(`🔍 Container classes:`, container.className);
+                console.log(`🔍 Container data attributes:`, container.dataset);
             }
             
             // Method 2: Look for any parent with an ID
@@ -2183,6 +2186,20 @@ class GraphicsHandler {
             if (!element) {
                 return { success: false, error: `Element not found: ${componentId}` };
             }
+
+            console.log(`🎯 RESIZE COMPLETE: Applying styles to element:`, {
+                componentId,
+                element,
+                elementTagName: element.tagName,
+                elementClasses: element.className,
+                currentDimensions: {
+                    width: element.offsetWidth,
+                    height: element.offsetHeight,
+                    left: element.offsetLeft,
+                    top: element.offsetTop
+                },
+                newStyles: styles
+            });
 
             // Remove resize preview overlay
             const previewElement = document.querySelector(`[data-resize-preview="${componentId}"]`);
