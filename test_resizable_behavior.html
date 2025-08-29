@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResizeableBehavior Test</title>
+    <style>
+        body {
+            margin: 20px;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        
+        .test-container {
+            width: 200px;
+            height: 150px;
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            border: 2px solid #2E7D32;
+            border-radius: 8px;
+            position: absolute;
+            top: 100px;
+            left: 100px;
+            cursor: move;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+        
+        .debug-panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            min-width: 300px;
+            font-size: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .debug-panel h3 {
+            margin: 0 0 10px 0;
+            color: #333;
+        }
+        
+        .debug-log {
+            background: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 5px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 11px;
+        }
+        
+        .controls {
+            margin: 10px 0;
+        }
+        
+        .controls button {
+            margin: 2px;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            background: #f0f0f0;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        .controls button:hover {
+            background: #e0e0e0;
+        }
+    </style>
+</head>
+<body>
+    <h1>ResizeableBehavior Integration Test</h1>
+    <p>This test validates the ResizeableBehavior integration with BaseUserContainer.</p>
+    
+    <div class="debug-panel">
+        <h3>Debug Console</h3>
+        <div class="controls">
+            <button onclick="createTestContainer()">Create Container</button>
+            <button onclick="toggleResizeHandles()">Toggle Resize Handles</button>
+            <button onclick="testResize()">Test Resize</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        <div id="debugLog" class="debug-log"></div>
+    </div>
+
+    <!-- Core Dependencies -->
+    <script src="App/Context/ChangeLog.js"></script>
+    <script src="App/Handler/Graphics Handler.js"></script>
+    <script src="App/Handler/Event Handler.js"></script>
+    <script src="App/Handler/Interface Handler.js"></script>
+    
+    <!-- User Level Components -->
+    <script src="App/Components/User Level/Base User Container/BaseUserContainer.js"></script>
+    <script src="App/Components/User Level/Base User Container/BaseUserContainerBehavior.js"></script>
+    <script src="App/Components/User Level/Base User Container/SelectableBehavior.js"></script>
+    <script src="App/Components/User Level/Base User Container/ResizeableBehavior.js"></script>
+    <script src="App/Components/User Level/Base User Container/MovableBehavior.js"></script>
+    <script src="App/Components/User Level/Base User Container/BaseUserContainerFactory.js"></script>
+
+    <script>
+        let testContainer = null;
+        let containerFactory = null;
+        
+        function debugLog(message) {
+            const logDiv = document.getElementById('debugLog');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function clearLog() {
+            document.getElementById('debugLog').innerHTML = '';
+        }
+        
+        // Initialize test environment
+        window.addEventListener('DOMContentLoaded', function() {
+            debugLog('🚀 Test environment initialized');
+            
+            // Check if required classes are available
+            const requiredClasses = [
+                'BaseUserContainer',
+                'BaseUserContainerBehavior', 
+                'ResizeableBehavior',
+                'SelectableBehavior',
+                'MovableBehavior',
+                'BaseUserContainerFactory'
+            ];
+            
+            for (const className of requiredClasses) {
+                if (typeof window[className] !== 'undefined') {
+                    debugLog(`✅ ${className} loaded successfully`);
+                } else {
+                    debugLog(`❌ ${className} failed to load`);
+                }
+            }
+            
+            // Initialize factory
+            try {
+                containerFactory = new BaseUserContainerFactory();
+                debugLog('🏭 BaseUserContainerFactory initialized');
+            } catch (error) {
+                debugLog(`❌ Factory initialization failed: ${error.message}`);
+            }
+        });
+        
+        function createTestContainer() {
+            try {
+                debugLog('📦 Creating test container...');
+                
+                if (!containerFactory) {
+                    debugLog('❌ Factory not initialized');
+                    return;
+                }
+                
+                const containerConfig = {
+                    preset: 'layout_container',
+                    parent: document.body,
+                    options: {
+                        isResizeable: true,
+                        isSelectable: true,
+                        isMovable: true,
+                        position: { x: 150, y: 150 },
+                        dimensions: { width: 200, height: 150 }
+                    }
+                };
+                
+                const result = containerFactory.createContainer(containerConfig);
+                
+                if (result.success) {
+                    testContainer = result.container;
+                    debugLog(`✅ Container created: ${testContainer.containerId}`);
+                    debugLog(`📊 Resizeable: ${testContainer.isResizeable}`);
+                    debugLog(`📊 ResizeableBehavior: ${testContainer.resizeableBehavior ? 'Initialized' : 'Not found'}`);
+                    
+                    if (testContainer.behavior && testContainer.behavior.resizeableBehavior) {
+                        debugLog(`📊 Behavior.ResizeableBehavior: Synced`);
+                    } else {
+                        debugLog(`⚠️ Behavior.ResizeableBehavior: Not synced`);
+                    }
+                    
+                    // Add visual styling
+                    if (testContainer.element) {
+                        testContainer.element.className = 'test-container';
+                        testContainer.element.innerHTML = 'Resizable Container';
+                    }
+                    
+                } else {
+                    debugLog(`❌ Container creation failed: ${result.error}`);
+                }
+                
+            } catch (error) {
+                debugLog(`❌ Create container error: ${error.message}`);
+            }
+        }
+        
+        function toggleResizeHandles() {
+            try {
+                if (!testContainer || !testContainer.resizeableBehavior) {
+                    debugLog('❌ No container or ResizeableBehavior available');
+                    return;
+                }
+                
+                debugLog('🔧 Toggling resize handles...');
+                
+                const result = testContainer.resizeableBehavior.showResizeHandles({ 
+                    visible: true 
+                });
+                
+                if (result.success) {
+                    debugLog('✅ Resize handles toggled successfully');
+                } else {
+                    debugLog(`❌ Toggle handles failed: ${result.error}`);
+                }
+                
+            } catch (error) {
+                debugLog(`❌ Toggle handles error: ${error.message}`);
+            }
+        }
+        
+        function testResize() {
+            try {
+                if (!testContainer || !testContainer.resizeableBehavior) {
+                    debugLog('❌ No container or ResizeableBehavior available');
+                    return;
+                }
+                
+                debugLog('📏 Testing resize functionality...');
+                
+                // Simulate a resize operation
+                const resizeBehavior = testContainer.resizeableBehavior;
+                
+                // Test startResize
+                const startResult = resizeBehavior.startResize({
+                    handle: 'bottom-right',
+                    clientX: 350,
+                    clientY: 300
+                });
+                
+                if (startResult.success) {
+                    debugLog('✅ StartResize successful');
+                    
+                    // Test performResize
+                    const performResult = resizeBehavior.performResize({
+                        clientX: 400,
+                        clientY: 350
+                    });
+                    
+                    if (performResult.success) {
+                        debugLog('✅ PerformResize successful');
+                        
+                        // Test endResize
+                        const endResult = resizeBehavior.endResize({});
+                        
+                        if (endResult.success) {
+                            debugLog('✅ EndResize successful - resize complete');
+                        } else {
+                            debugLog(`❌ EndResize failed: ${endResult.error}`);
+                        }
+                    } else {
+                        debugLog(`❌ PerformResize failed: ${performResult.error}`);
+                    }
+                } else {
+                    debugLog(`❌ StartResize failed: ${startResult.error}`);
+                }
+                
+            } catch (error) {
+                debugLog(`❌ Test resize error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

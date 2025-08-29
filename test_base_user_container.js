@@ -244,6 +244,19 @@ try {
         validate() { return []; }
         setHandlers() {}
         updateHierarchyInfo() {}
+        
+        // Add missing mode detection methods for ResizeableBehavior compatibility
+        getCurrentMode() {
+            return this.inputMode || 'design';
+        }
+        
+        isDesignMode() {
+            return this.getCurrentMode() === 'design';
+        }
+        
+        isPreviewMode() {
+            return this.getCurrentMode() === 'preview';
+        }
     }
     
     class BaseUserContainerBehavior {
@@ -516,7 +529,8 @@ function testBaseUserContainer() {
     // Test 10: Specialized Behaviors
     console.log('\n🎯 Test 10: Specialized Behaviors');
     
-    // Test SelectableBehavior
+    // Test SelectableBehavior (reset mode first)
+    container.handleInputModeChange('design');
     const selectableBehavior = new SelectableBehavior(container);
     const multiSelectResult = selectableBehavior.selectMultiple({ mode: 'toggle' });
     console.log('✅ Selectable behavior:', {

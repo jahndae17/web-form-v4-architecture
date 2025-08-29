@@ -347,6 +347,9 @@ class GraphicsHandler {
                 case 'destroy_element':
                     return await this.handleElementDestruction(request);
                 
+                case 'resize_handles':
+                    return await this.handleResizeHandles(request);
+                
                 default:
                     console.warn(`Graphics Handler: Unknown request type: ${type}`);
                     return { success: false, error: `Unknown request type: ${type}` };
@@ -480,6 +483,378 @@ class GraphicsHandler {
         }
         
         return { success: false, error: `Element not found: ${componentId}` };
+    }
+
+    async handleResizeHandles(request) {
+        const { componentId, resizeHandles, classes, options } = request;
+        const element = document.getElementById(componentId);
+        
+        if (!element) {
+            return { success: false, error: `Element not found: ${componentId}` };
+        }
+
+        const handlesContainer = element.querySelector('.resize-handles-container') || 
+                               this.createResizeHandlesContainer(element, componentId);
+        
+        // Toggle visibility based on request
+        if (resizeHandles.visible) {
+            await this.showResizeHandlesForElement(handlesContainer, element, resizeHandles);
+        } else {
+            await this.hideResizeHandlesForElement(handlesContainer);
+        }
+        
+        // Apply class changes
+        if (classes) {
+            if (classes.add && Array.isArray(classes.add)) {
+                classes.add.forEach(cls => element.classList.add(cls));
+            }
+            if (classes.remove && Array.isArray(classes.remove)) {
+                classes.remove.forEach(cls => element.classList.remove(cls));
+            }
+        }
+
+        return { success: true, componentId, handlesVisible: resizeHandles.visible };
+    }
+
+    createResizeHandlesContainer(element, componentId) {
+        // Create container for resize handles
+        const handlesContainer = document.createElement('div');
+        handlesContainer.className = 'resize-handles-container';
+        handlesContainer.id = `${componentId}-resize-handles`;
+        handlesContainer.style.cssText = `
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            right: -20px;
+            bottom: -20px;
+            pointer-events: none;
+            z-index: 1000;
+        `;
+        
+        // Ensure element has relative positioning for handle positioning
+        const elementPosition = window.getComputedStyle(element).position;
+        if (elementPosition === 'static') {
+            element.style.position = 'relative';
+        }
+        
+        // Append to element
+        element.appendChild(handlesContainer);
+        
+        return handlesContainer;
+    }
+
+    async showResizeHandlesForElement(handlesContainer, element, resizeHandles) {
+        // Clear existing handles
+        handlesContainer.innerHTML = '';
+        
+        // Provide defaults for missing properties
+        const positions = resizeHandles.positions || ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+        const style = resizeHandles.style || {
+            width: '8px',
+            height: '8px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            borderRadius: '2px',
+            opacity: '1',
+            pointerEvents: 'auto'
+        };
+        const hoverStyle = resizeHandles.hoverStyle || {};
+        
+        // Create handles for each position
+        positions.forEach(position => {
+            const handle = this.createResizeHandle(position, style, hoverStyle);
+            handlesContainer.appendChild(handle);
+        });
+        
+        // Make container visible
+        handlesContainer.style.display = 'block';
+        handlesContainer.style.pointerEvents = 'auto';
+        
+        return { success: true };
+    }
+
+    async hideResizeHandlesForElement(handlesContainer) {
+        handlesContainer.style.display = 'none';
+        handlesContainer.style.pointerEvents = 'none';
+        
+        return { success: true };
+    }
+
+    createResizeHandle(position, style, hoverStyle) {
+        const handle = document.createElement('div');
+        handle.className = `resize-handle resize-handle-${position}`;
+        handle.dataset.resizePosition = position;
+        
+        // Ensure style object has safe defaults
+        const safeStyle = {
+            width: '40px', // Increased from 8px to 40px for better interaction
+            height: '40px', // Increased from 8px to 40px for better interaction
+            backgroundColor: 'transparent', // Make invisible
+            border: 'none', // Remove visible border
+            borderRadius: (style && style.borderRadius) || '2px',
+            opacity: '1', // Keep fully opaque for interaction
+            pointerEvents: (style && style.pointerEvents) || 'auto',
+            cursor: this.getResizeCursor(position),
+            transition: 'all 0.15s ease-in-out',
+            zIndex: '10000', // Ensure handles are on top
+            position: 'absolute'
+        };
+        
+        // Apply base styles with invisible handles (cursor change only)
+        Object.assign(handle.style, safeStyle);
+        
+        // Position the handle
+        this.positionResizeHandle(handle, position);
+        
+        // Add resize event listeners with higher priority than move
+        this.addResizeEventListeners(handle, position);
+        
+        return handle;
+    }
+
+    positionResizeHandle(handle, position) {
+        const positions = {
+            'nw': { top: '-20px', left: '-20px' },
+            'n':  { top: '-20px', left: '50%', transform: 'translateX(-50%)' },
+            'ne': { top: '-20px', right: '-20px' },
+            'e':  { top: '50%', right: '-20px', transform: 'translateY(-50%)' },
+            'se': { bottom: '-20px', right: '-20px' },
+            's':  { bottom: '-20px', left: '50%', transform: 'translateX(-50%)' },
+            'sw': { bottom: '-20px', left: '-20px' },
+            'w':  { top: '50%', left: '-20px', transform: 'translateY(-50%)' }
+        };
+        
+        const pos = positions[position];
+        if (pos) {
+            Object.assign(handle.style, pos);
+        }
+    }
+
+    getResizeCursor(position) {
+        const cursors = {
+            'nw': 'nw-resize',
+            'n':  'n-resize',
+            'ne': 'ne-resize',
+            'e':  'e-resize',
+            'se': 'se-resize',
+            's':  's-resize',
+            'sw': 'sw-resize',
+            'w':  'w-resize'
+        };
+        
+        return cursors[position] || 'default';
+    }
+
+    /**
+     * Add resize event listeners with priority over move behavior
+     */
+    addResizeEventListeners(handle, position) {
+        // Store handle position for access in event handlers
+        handle._resizePosition = position;
+        
+        // Mousedown event with higher priority
+        handle.addEventListener('mousedown', (e) => {
+            // Stop propagation to prevent move behavior from triggering
+            e.stopPropagation();
+            e.preventDefault();
+            
+            console.log(`🎯 Resize handle ${position} mousedown - starting resize`);
+            
+            // Find the parent container - improved logic
+            let container = null;
+            
+            // Method 1: Look for resize handles container, then get its parent
+            const handlesContainer = handle.closest('.resize-handles-container');
+            if (handlesContainer && handlesContainer.parentElement) {
+                container = handlesContainer.parentElement;
+                console.log(`🔍 Found container via handles container: ${container.id}`);
+            }
+            
+            // Method 2: Look for any parent with an ID
+            if (!container) {
+                container = handle.closest('[id]');
+                if (container && container.classList.contains('resize-handles-container')) {
+                    // This is the handles container, get its parent
+                    container = container.parentElement;
+                }
+                console.log(`🔍 Found container via closest ID: ${container?.id || 'none'}`);
+            }
+            
+            // Method 3: Look for container with specific patterns
+            if (!container) {
+                container = handle.closest('[id*="element_"], .base-user-container, [data-container-type]');
+                console.log(`🔍 Found container via pattern matching: ${container?.id || 'none'}`);
+            }
+            
+            if (!container || !container.id) {
+                console.warn('❌ No parent container found for resize handle');
+                return;
+            }
+            
+            // Get container's ResizeableBehavior
+            const containerId = container.id;
+            console.log(`🎯 Looking for container: ${containerId}`);
+            const containerInstance = this.findContainerInstance(containerId);
+            
+            if (containerInstance && containerInstance.resizeableBehavior) {
+                console.log(`✅ Found ResizeableBehavior for ${containerId}`);
+                
+                // Start resize operation through ResizeableBehavior
+                const resizeResult = containerInstance.resizeableBehavior.startResize({
+                    handle: position,
+                    clientX: e.clientX,
+                    clientY: e.clientY
+                });
+                
+                console.log('🎯 Resize started:', resizeResult);
+                
+                if (resizeResult.success) {
+                    this.handleResizeStart(container, position, e, containerInstance);
+                }
+            } else {
+                console.warn(`❌ No ResizeableBehavior found for container ${containerId}`);
+                console.log('🔍 Container instance:', containerInstance);
+                if (containerInstance) {
+                    console.log('🔍 Available behaviors:', {
+                        resizeableBehavior: !!containerInstance.resizeableBehavior,
+                        selectableBehavior: !!containerInstance.selectableBehavior,
+                        movableBehavior: !!containerInstance.movableBehavior
+                    });
+                }
+            }
+        }, { capture: true }); // Use capture to ensure we get the event first
+        
+        // Prevent context menu on resize handles
+        handle.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+    }
+
+    /**
+     * Find container instance by ID (for accessing behaviors)
+     */
+    findContainerInstance(containerId) {
+        console.log(`🔍 Searching for container: ${containerId}`);
+        
+        // Try various global containers that might exist
+        if (typeof window !== 'undefined') {
+            // Check if there's a global registry (primary method)
+            if (window.containerRegistry && window.containerRegistry[containerId]) {
+                console.log(`✅ Found container in global registry: ${containerId}`);
+                return window.containerRegistry[containerId];
+            }
+            
+            // Check if there's a FormBuilderCanvas with containers
+            if (window.canvas && window.canvas.containers) {
+                const found = window.canvas.containers.find(c => c.containerId === containerId);
+                if (found) {
+                    console.log(`✅ Found container in window.canvas.containers: ${containerId}`);
+                    return found;
+                }
+            }
+            
+            // Check for FormBuilderCanvas instance
+            if (window.formBuilderCanvas && window.formBuilderCanvas.containers) {
+                const found = window.formBuilderCanvas.containers.find(c => c.containerId === containerId);
+                if (found) {
+                    console.log(`✅ Found container in formBuilderCanvas.containers: ${containerId}`);
+                    return found;
+                }
+            }
+            
+            // Check if the container is attached to the DOM element itself
+            const element = document.getElementById(containerId);
+            if (element && element._containerInstance) {
+                console.log(`✅ Found container attached to DOM element: ${containerId}`);
+                return element._containerInstance;
+            }
+            
+            // Debug: List all available containers
+            console.log('🔍 Available containers:');
+            if (window.containerRegistry) {
+                console.log('  - Global registry:', Object.keys(window.containerRegistry));
+            }
+            if (window.canvas && window.canvas.containers) {
+                console.log('  - Canvas containers:', window.canvas.containers.map(c => c.containerId));
+            }
+            if (window.formBuilderCanvas && window.formBuilderCanvas.containers) {
+                console.log('  - FormBuilder containers:', window.formBuilderCanvas.containers.map(c => c.containerId));
+            }
+        }
+        
+        console.warn(`❌ Container not found: ${containerId}`);
+        return null;
+    }
+
+    /**
+     * Handle resize start - set up mouse tracking
+     */
+    handleResizeStart(container, position, startEvent, containerInstance) {
+        const startX = startEvent.clientX;
+        const startY = startEvent.clientY;
+        const startRect = container.getBoundingClientRect();
+        
+        console.log(`🎯 Starting resize tracking for ${container.id}`);
+        
+        // Mouse move handler for live resize
+        const handleMouseMove = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (containerInstance.resizeableBehavior) {
+                const resizeResult = containerInstance.resizeableBehavior.performResize({
+                    clientX: e.clientX,
+                    clientY: e.clientY
+                });
+                
+                if (resizeResult.success && resizeResult.graphics_request) {
+                    this.executeRequest(resizeResult.graphics_request);
+                }
+            }
+        };
+        
+        // Mouse up handler to end resize
+        const handleMouseUp = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            console.log(`🎯 Ending resize for ${container.id}`);
+            
+            // Remove event listeners
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            
+            // End resize operation
+            if (containerInstance.resizeableBehavior) {
+                const endResult = containerInstance.resizeableBehavior.endResize({
+                    finalDimensions: {
+                        width: container.offsetWidth,
+                        height: container.offsetHeight,
+                        x: container.offsetLeft,
+                        y: container.offsetTop
+                    }
+                });
+                
+                if (endResult.success && endResult.graphics_request) {
+                    this.executeRequest(endResult.graphics_request);
+                }
+            }
+        };
+        
+        // Add document-level event listeners for drag behavior
+        document.addEventListener('mousemove', handleMouseMove, { passive: false });
+        document.addEventListener('mouseup', handleMouseUp, { passive: false });
+        
+        // Prevent text selection during resize
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+        
+        // Restore selection after resize
+        setTimeout(() => {
+            document.body.style.userSelect = '';
+            document.body.style.webkitUserSelect = '';
+        }, 100);
     }
 
     // ========================

@@ -61,6 +61,7 @@ class BaseUserContainer {
         // Behavior Instances
         this.selectableBehavior = null;
         this.movableBehavior = null;
+        this.resizeableBehavior = null;
         
         // DOM Element (structure only)
         this.element = null;
@@ -200,7 +201,40 @@ class BaseUserContainer {
             }
         }
         
-        // TODO: Add other behavior initializations here (ResizeableBehavior, etc.)
+        // Initialize ResizeableBehavior if available and enabled
+        if (typeof ResizeableBehavior !== 'undefined' && this.isResizeable) {
+            try {
+                this.resizeableBehavior = new ResizeableBehavior(this);
+                console.log(`🎯 ResizeableBehavior initialized for ${this.containerId}`);
+            } catch (error) {
+                console.warn(`⚠️ Failed to initialize ResizeableBehavior for ${this.containerId}:`, error);
+            }
+        }
+        
+        // Register this container globally for Graphics Handler access
+        this.registerGlobally();
+    }
+    
+    /**
+     * Register container in global registry for Graphics Handler access
+     */
+    registerGlobally() {
+        if (typeof window !== 'undefined') {
+            // Create global container registry if it doesn't exist
+            if (!window.containerRegistry) {
+                window.containerRegistry = {};
+            }
+            
+            // Register this container
+            window.containerRegistry[this.containerId] = this;
+            console.log(`📝 Container ${this.containerId} registered globally`);
+            
+            // Also attach to DOM element for direct access
+            if (this.element) {
+                this.element._containerInstance = this;
+                console.log(`📝 Container ${this.containerId} attached to DOM element`);
+            }
+        }
     }
     
     // ========================
@@ -872,6 +906,18 @@ class BaseUserContainer {
      * Destroy Component
      */
     destroy() {
+        // Unregister from global registry
+        if (typeof window !== 'undefined' && window.containerRegistry) {
+            delete window.containerRegistry[this.containerId];
+            console.log(`📝 Container ${this.containerId} unregistered globally`);
+        }
+        
+        // Clean up DOM element attachment
+        if (this.element && this.element._containerInstance) {
+            delete this.element._containerInstance;
+            console.log(`📝 Container ${this.containerId} detached from DOM element`);
+        }
+        
         // Unregister from handlers
         if (this.interfaceHandler) {
             this.interfaceHandler.unregisterComponent(this.containerId);
@@ -973,19 +1019,19 @@ class BaseUserContainer {
      * Handle click events - delegates to appropriate behaviors
      * @param {Event} event - The click event
      */
-    handleClick(event) {
+    async handleClick(event) {
         // Only handle clicks in design mode if SelectableBehavior is available
         if (this.selectableBehavior && this.isDesignMode()) {
             // Determine click type based on modifier keys
             if (event.ctrlKey || event.metaKey) {
                 // Multi-select toggle
-                return this.selectableBehavior.selectMultiple({ mode: 'toggle' });
+                return await this.selectableBehavior.selectMultiple({ mode: 'toggle' });
             } else if (event.shiftKey) {
                 // Range selection (if there's a previous selection)
-                return this.selectableBehavior.selectRange({ endComponent: this });
+                return await this.selectableBehavior.selectRange({ endComponent: this });
             } else {
                 // Single selection
-                return this.selectableBehavior.selectSingle({ clearOthers: true });
+                return await this.selectableBehavior.selectSingle({ clearOthers: true });
             }
         }
         

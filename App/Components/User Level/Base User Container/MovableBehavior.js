@@ -274,7 +274,7 @@ class MovableBehavior {
      * End Movement Operation
      * Finalizes position and cleans up movement state
      */
-    endMove(parameters) {
+    async endMove(parameters) {
         const wasMoving = this.isMoving;
         const finalMousePosition = parameters.finalPosition || this.currentPosition;
         
@@ -296,8 +296,8 @@ class MovableBehavior {
         // If we never actually moved (stayed below threshold), allow selection
         if (!wasMoving && this.component.selectableBehavior) {
             // Trigger selection behavior instead
-            setTimeout(() => {
-                this.component.selectableBehavior.selectSingle({ clearOthers: true });
+            setTimeout(async () => {
+                await this.component.selectableBehavior.selectSingle({ clearOthers: true });
             }, 0);
             
             return this._resetMovementState();

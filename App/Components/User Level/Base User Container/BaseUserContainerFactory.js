@@ -440,21 +440,39 @@ class BaseUserContainerFactory {
         try {
             // Attach SelectableBehavior if enabled and available
             if (container.isSelectable && SelectableBehavior) {
-                const selectableBehavior = new SelectableBehavior();
-                const attachResult = selectableBehavior.attachToBehavior(container);
-                if (attachResult.success) {
-                    container.behavior.selectableBehavior = selectableBehavior;
-                    console.log(`🏭 SelectableBehavior attached to ${container.containerId}`);
+                try {
+                    // Check if SelectableBehavior is already initialized by the container
+                    if (!container.selectableBehavior) {
+                        const selectableBehavior = new SelectableBehavior(container);
+                        container.selectableBehavior = selectableBehavior;
+                        container.behavior.selectableBehavior = selectableBehavior;
+                        console.log(`🏭 SelectableBehavior attached to ${container.containerId}`);
+                    } else {
+                        // Sync already initialized behavior to behavior object
+                        container.behavior.selectableBehavior = container.selectableBehavior;
+                        console.log(`🏭 SelectableBehavior already initialized for ${container.containerId}`);
+                    }
+                } catch (error) {
+                    console.warn(`⚠️ SelectableBehavior attachment failed for ${container.containerId}:`, error.message);
                 }
             }
 
             // Attach ResizeableBehavior if enabled and available
             if (container.isResizeable && ResizeableBehavior) {
-                const resizeableBehavior = new ResizeableBehavior();
-                const attachResult = resizeableBehavior.attachToBehavior(container);
-                if (attachResult.success) {
-                    container.behavior.resizeableBehavior = resizeableBehavior;
-                    console.log(`🏭 ResizeableBehavior attached to ${container.containerId}`);
+                try {
+                    // Check if ResizeableBehavior is already initialized by the container
+                    if (!container.resizeableBehavior) {
+                        const resizeableBehavior = new ResizeableBehavior(container);
+                        container.resizeableBehavior = resizeableBehavior;
+                        container.behavior.resizeableBehavior = resizeableBehavior;
+                        console.log(`🏭 ResizeableBehavior attached to ${container.containerId}`);
+                    } else {
+                        // Sync already initialized behavior to behavior object
+                        container.behavior.resizeableBehavior = container.resizeableBehavior;
+                        console.log(`🏭 ResizeableBehavior already initialized for ${container.containerId}`);
+                    }
+                } catch (error) {
+                    console.warn(`⚠️ ResizeableBehavior attachment failed for ${container.containerId}:`, error.message);
                 }
             }
 

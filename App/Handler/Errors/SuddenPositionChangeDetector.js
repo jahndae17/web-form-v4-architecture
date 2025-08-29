@@ -18,9 +18,9 @@ class SuddenPositionChangeDetector {
     constructor() {
         this.componentPositions = new Map(); // componentId -> position history
         this.thresholds = {
-            suddenJumpDistance: 150, // px - distance that indicates a sudden jump
+            suddenJumpDistance: 400, // px - distance that indicates a sudden jump
             velocityLimit: 2500, // px/s - max reasonable movement velocity  
-            accumumulationThreshold: 75, // px - offset accumulation detection
+            accumumulationThreshold: 200, // px - offset accumulation detection
             checkInterval: 100 // ms - how often to check positions
         };
         
