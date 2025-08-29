@@ -350,6 +350,12 @@ class GraphicsHandler {
                 case 'resize_handles':
                     return await this.handleResizeHandles(request);
                 
+                case 'resize_preview':
+                    return await this.handleResizePreview(request);
+                
+                case 'resize_complete':
+                    return await this.handleResizeComplete(request);
+                
                 default:
                     console.warn(`Graphics Handler: Unknown request type: ${type}`);
                     return { success: false, error: `Unknown request type: ${type}` };
@@ -2111,6 +2117,113 @@ class GraphicsHandler {
         this.changeLog = null;
         
         console.log('🎨 Graphics Handler destroyed');
+    }
+
+    /**
+     * Handle resize preview requests - shows visual feedback during resize
+     */
+    async handleResizePreview(request) {
+        try {
+            const { componentId, overlay } = request;
+            
+            if (!componentId) {
+                return { success: false, error: 'ComponentId is required for resize preview' };
+            }
+
+            // Remove existing resize preview
+            const existingPreview = document.querySelector(`[data-resize-preview="${componentId}"]`);
+            if (existingPreview) {
+                existingPreview.remove();
+            }
+
+            // Create resize preview overlay if overlay data provided
+            if (overlay) {
+                const previewElement = document.createElement('div');
+                previewElement.dataset.resizePreview = componentId;
+                previewElement.className = 'resize-preview-overlay';
+                
+                // Apply overlay styles
+                Object.assign(previewElement.style, overlay.styles);
+                
+                // Position based on dimensions
+                if (overlay.dimensions) {
+                    previewElement.style.left = `${overlay.dimensions.x}px`;
+                    previewElement.style.top = `${overlay.dimensions.y}px`;
+                    previewElement.style.width = `${overlay.dimensions.width}px`;
+                    previewElement.style.height = `${overlay.dimensions.height}px`;
+                }
+                
+                // Append to body for top-level positioning
+                document.body.appendChild(previewElement);
+            }
+
+            return { 
+                success: true, 
+                componentId,
+                previewVisible: !!overlay
+            };
+        } catch (error) {
+            console.error('Graphics Handler: Resize preview failed:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * Handle resize complete requests - finalize resize operation
+     */
+    async handleResizeComplete(request) {
+        try {
+            const { componentId, styles, animation } = request;
+            
+            if (!componentId) {
+                return { success: false, error: 'ComponentId is required for resize complete' };
+            }
+
+            const element = document.getElementById(componentId);
+            if (!element) {
+                return { success: false, error: `Element not found: ${componentId}` };
+            }
+
+            // Remove resize preview overlay
+            const previewElement = document.querySelector(`[data-resize-preview="${componentId}"]`);
+            if (previewElement) {
+                previewElement.remove();
+            }
+
+            // Apply final styles with animation if specified
+            if (styles) {
+                if (animation && animation.duration > 0) {
+                    // Animate to final state
+                    element.style.transition = `all ${animation.duration}ms ${animation.easing || 'ease-in-out'}`;
+                    
+                    // Apply styles after a brief delay to ensure transition takes effect
+                    await new Promise(resolve => {
+                        setTimeout(() => {
+                            Object.assign(element.style, styles);
+                            resolve();
+                        }, 10);
+                    });
+                    
+                    // Remove transition after animation completes
+                    setTimeout(() => {
+                        element.style.transition = '';
+                    }, animation.duration + 50);
+                } else {
+                    // Apply styles immediately
+                    Object.assign(element.style, styles);
+                }
+            }
+
+            return { 
+                success: true, 
+                componentId,
+                stylesApplied: !!styles,
+                animated: !!(animation && animation.duration > 0)
+            };
+        } catch (error) {
+            console.error('Graphics Handler: Resize complete failed:', error);
+            return { success: false, error: error.message };
+        }
     }
 
     /**

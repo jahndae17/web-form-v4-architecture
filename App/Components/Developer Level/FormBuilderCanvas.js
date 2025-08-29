@@ -179,7 +179,10 @@ class FormBuilderCanvas extends BaseContainer {
                     // Additional check: make sure this isn't part of a drag operation
                     if (!this.isDragInProgress) {
                         console.log('🎯 Canvas empty area clicked - deselecting all containers');
-                        this.deselectAllContainers();
+                        // Make deselection async to prevent timing issues
+                        this.deselectAllContainers().catch(error => {
+                            console.error('❌ Error during canvas deselection:', error);
+                        });
                     } else {
                         console.log('🚫 Ignoring canvas click during drag operation');
                     }
@@ -200,34 +203,25 @@ class FormBuilderCanvas extends BaseContainer {
         }
     }
 
-    deselectAllContainers() {
+    async deselectAllContainers() {
         // Deselect all containers that have SelectableBehavior
         if (this.componentInstances) {
             let deselectedCount = 0;
             
-            this.componentInstances.forEach((container, elementId) => {
+            // Use for...of to properly handle async operations
+            for (const [elementId, container] of this.componentInstances) {
                 if (container.selectableBehavior && container.isSelected) {
-                    const result = container.selectableBehavior.deselectAll({});
-                    if (result.success && result.graphics_request) {
-                        // Send graphics request to Graphics Handler if available
-                        if (window.toolsApp && window.toolsApp.graphicsHandler) {
-                            console.log(`📤 Sending deselection graphics request for ${container.containerId}`);
-                            const request = result.graphics_request;
-                            
-                            // Format the request according to Graphics Handler expectations
-                            const styleUpdate = {
-                                componentId: request.componentId,
-                                styles: request.finalStyles,
-                                classes: request.classes,
-                                attributes: request.attributes
-                            };
-                            
-                            window.toolsApp.graphicsHandler.updateComponentStyle(styleUpdate);
+                    try {
+                        const result = await container.selectableBehavior.deselectAll({});
+                        if (result.success) {
                             deselectedCount++;
+                            console.log(`✅ Deselected container: ${container.containerId}`);
                         }
+                    } catch (error) {
+                        console.error(`❌ Failed to deselect container ${container.containerId}:`, error);
                     }
                 }
-            });
+            }
             
             if (deselectedCount > 0) {
                 console.log(`✅ Successfully deselected ${deselectedCount} container(s)`);
