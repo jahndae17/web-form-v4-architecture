@@ -1,1 +1,2 @@
 * Create UserContainer > Close ToolsPanel > Select UserContainer : User Container Selected Style Not Rendering 
+* Selecting and deselecting twice in a row fails to render the selection properly the second time.

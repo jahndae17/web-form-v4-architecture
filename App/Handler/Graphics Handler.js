@@ -2187,16 +2187,22 @@ class GraphicsHandler {
                 return { success: false, error: `Element not found: ${componentId}` };
             }
 
+            // Find the resize handles container - this should be the actual resize target
+            const handlesContainer = element.querySelector('.resize-handles-container');
+            const resizeTarget = handlesContainer || element;
+
             console.log(`🎯 RESIZE COMPLETE: Applying styles to element:`, {
                 componentId,
-                element,
-                elementTagName: element.tagName,
-                elementClasses: element.className,
+                mainElement: element,
+                resizeTarget,
+                targetTagName: resizeTarget.tagName,
+                targetClasses: resizeTarget.className,
+                targetId: resizeTarget.id,
                 currentDimensions: {
-                    width: element.offsetWidth,
-                    height: element.offsetHeight,
-                    left: element.offsetLeft,
-                    top: element.offsetTop
+                    width: resizeTarget.offsetWidth,
+                    height: resizeTarget.offsetHeight,
+                    left: resizeTarget.offsetLeft,
+                    top: resizeTarget.offsetTop
                 },
                 newStyles: styles
             });
@@ -2210,24 +2216,24 @@ class GraphicsHandler {
             // Apply final styles with animation if specified
             if (styles) {
                 if (animation && animation.duration > 0) {
-                    // Animate to final state
-                    element.style.transition = `all ${animation.duration}ms ${animation.easing || 'ease-in-out'}`;
+                    // Animate to final state on the resize target
+                    resizeTarget.style.transition = `all ${animation.duration}ms ${animation.easing || 'ease-in-out'}`;
                     
                     // Apply styles after a brief delay to ensure transition takes effect
                     await new Promise(resolve => {
                         setTimeout(() => {
-                            Object.assign(element.style, styles);
+                            Object.assign(resizeTarget.style, styles);
                             resolve();
                         }, 10);
                     });
                     
                     // Remove transition after animation completes
                     setTimeout(() => {
-                        element.style.transition = '';
+                        resizeTarget.style.transition = '';
                     }, animation.duration + 50);
                 } else {
-                    // Apply styles immediately
-                    Object.assign(element.style, styles);
+                    // Apply styles immediately to the resize target
+                    Object.assign(resizeTarget.style, styles);
                 }
             }
 
