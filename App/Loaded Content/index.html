@@ -330,6 +330,11 @@
     <script src="../Components/User Level/Base User Container/BaseUserContainerBehavior.js"></script>
     <script src="../Components/User Level/Base User Container/BaseUserContainerFactory.js"></script>
     
+    <!-- Native Sign In Component -->
+    <script src="../Components/User Level/Login/Native Sign In.js"></script>
+    <script src="../Components/User Level/Login/NativeSignInBehavior.js"></script>
+    <script src="../Components/User Level/Login/NativeSignInFactory.js"></script>
+    
     <script>
         // ========================
         // REACTIVE ARCHITECTURE IMPLEMENTATION
@@ -557,10 +562,20 @@
                 this.toolsContainer.addTool(containerTool);
                 console.log(`🔧 Added tool: ${containerTool.icon} ${containerTool.name}`);
 
+                // Add Native Sign In authentication component
+                const nativeSignInTool = ToolsContainer.createToolItem('native-sign-in', 'Native Sign In', 'form', {
+                    icon: '🔐', 
+                    description: 'Native Sign In - Multi-provider authentication component with passkey support'
+                });
+
+                // Add the Native Sign In tool to the toolbar
+                this.toolsContainer.addTool(nativeSignInTool);
+                console.log(`🔧 Added tool: ${nativeSignInTool.icon} ${nativeSignInTool.name}`);
+
                 // Note: Tool selection and activation will be handled by Event Handler
                 // when user interacts with the tool directly
                 
-                console.log('🔧 Base User Container tool added to toolbar');
+                console.log('🔧 Drawing tools added to toolbar (Base User Container, Native Sign In)');
             }
 
             setupReactiveListeners() {

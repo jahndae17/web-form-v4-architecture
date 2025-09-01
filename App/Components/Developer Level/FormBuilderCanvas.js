@@ -33,8 +33,8 @@ class FormBuilderCanvas extends BaseContainer {
         this.changeLog = changeLog;
         
         // Override BaseContainer properties with FormBuilderCanvas specific ones
-        this.allowedChildTypes = ['base-user-container', 'form-element', 'container'];
-        this.allowedToolTypes = ['container', 'form', 'drawing', 'base-user-container'];
+        this.allowedChildTypes = ['base-user-container', 'native-sign-in', 'form-element', 'container'];
+        this.allowedToolTypes = ['container', 'form', 'drawing', 'base-user-container', 'native-sign-in'];
         this.maxChildren = options.maxChildren || 50;
         this.isResizable = options.isResizable !== undefined ? options.isResizable : true;
         this.isDraggable = options.isDraggable !== undefined ? options.isDraggable : false;
@@ -604,6 +604,10 @@ class FormBuilderCanvas extends BaseContainer {
                 return this.createBaseUserContainerInstance(formElement);
             }
             
+            if (formElement.type === 'native-sign-in') {
+                return this.createNativeSignInInstance(formElement);
+            }
+            
             // Generate the HTML content for other element types
             const elementHTML = this.generateElementHTML(formElement);
             
@@ -732,6 +736,101 @@ class FormBuilderCanvas extends BaseContainer {
             
         } catch (error) {
             console.error('❌ Error creating BaseUserContainer instance:', error);
+            return false;
+        }
+    }
+    
+    createNativeSignInInstance(formElement) {
+        try {
+            const canvasElement = this.element || document.getElementById(this.containerId);
+            if (!canvasElement) {
+                console.error('❌ Canvas element not found for Native Sign In creation:', this.containerId);
+                return false;
+            }
+            
+            // Create DOM element for the NativeSignIn
+            const signInDiv = document.createElement('div');
+            signInDiv.id = formElement.id;
+            signInDiv.style.position = 'absolute';
+            signInDiv.style.left = formElement.position.x + 'px';
+            signInDiv.style.top = formElement.position.y + 'px';
+            signInDiv.style.zIndex = '100';
+            signInDiv.style.minWidth = '300px';
+            signInDiv.style.minHeight = '400px';
+            signInDiv.style.backgroundColor = 'white';
+            signInDiv.style.borderRadius = '12px';
+            signInDiv.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.15)';
+            signInDiv.style.border = '1px solid #e0e0e0';
+            signInDiv.style.padding = '0';
+            // Container will be populated by NativeSignIn component
+            
+            // Add to canvas first so DOM element exists
+            canvasElement.appendChild(signInDiv);
+            
+            // Create NativeSignIn instance
+            if (typeof NativeSignIn !== 'undefined') {
+                const signInConfig = {
+                    userType: 'interactive',
+                    formRole: 'authentication',
+                    title: formElement.properties.title || 'Sign In',
+                    description: formElement.properties.description || 'Multi-provider authentication with passkey support',
+                    allowedChildTypes: [],
+                    changeLog: this.changeLog, // Pass ChangeLog reference
+                    existingElement: signInDiv, // Pass the DOM element that's already in the canvas
+                    
+                    // Native Sign In specific configuration
+                    providers: formElement.properties.providers || ['passkey', 'google', 'apple', 'microsoft'],
+                    passkeyFirst: formElement.properties.passkeyFirst !== false,
+                    allowRememberMe: formElement.properties.allowRememberMe !== false,
+                    showQRCode: formElement.properties.showQRCode !== false,
+                    theme: formElement.properties.theme || 'light',
+                    branding: formElement.properties.branding || {}
+                };
+                
+                const signInComponent = new NativeSignIn(formElement.id, this, signInConfig);
+                
+                // Store the component instance reference
+                this.componentInstances = this.componentInstances || new Map();
+                this.componentInstances.set(formElement.id, signInComponent);
+                
+                // Link the instance to the DOM element for click handling
+                signInDiv._nativeSignIn = signInComponent;
+                
+                // Add click event listener to the DOM element for selection behavior
+                signInDiv.addEventListener('click', (event) => {
+                    if (signInComponent.handleClick) {
+                        const result = signInComponent.handleClick(event);
+                        if (result.success) {
+                            console.log(`🎯 Selection triggered for ${signInComponent.containerId}:`, result);
+                            
+                            // Send graphics request to Graphics Handler if available
+                            if (result.graphics_request && window.toolsApp && window.toolsApp.graphicsHandler) {
+                                console.log('📤 Sending graphics request to Graphics Handler');
+                                const request = result.graphics_request;
+                                
+                                // Format the request according to Graphics Handler expectations
+                                const styleUpdate = {
+                                    componentId: request.componentId,
+                                    styles: request.finalStyles,
+                                    classes: request.classes,
+                                    attributes: request.attributes
+                                };
+                                
+                                window.toolsApp.graphicsHandler.updateComponentStyle(styleUpdate);
+                            }
+                        }
+                    }
+                });
+                
+                console.log(`✅ NativeSignIn instance created: ${formElement.id} with authentication styling`);
+                return true;
+            } else {
+                console.error('❌ NativeSignIn class not available');
+                return false;
+            }
+            
+        } catch (error) {
+            console.error('❌ Error creating NativeSignIn instance:', error);
             return false;
         }
     }
