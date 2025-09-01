@@ -244,10 +244,27 @@ class ResizeableBehavior {
         console.log("🔍 ResizeableBehavior Stage 2f: Creating live resize graphics request");
         
         // Create live resize graphics request
+        // IMPORTANT: During performResize (live preview), we should NOT apply styles to the element
+        // Instead, we only update the overlay preview and pass calculated dimensions for tracking
         const graphics_request = {
             type: 'resize_preview',
             componentId: this.componentId,
-            styles: {
+            // NO STYLES during live preview to prevent layout thrashing of parent containers
+            overlay: {
+                update: true,
+                dimensions: constrainedDimensions,
+                showDimensions: true,
+                dimensionText: `${Math.round(constrainedDimensions.width)} × ${Math.round(constrainedDimensions.height)}`,
+                styles: {
+                    position: 'absolute',
+                    border: '2px dashed #007acc',
+                    background: 'rgba(0, 122, 204, 0.1)',
+                    pointerEvents: 'none',
+                    zIndex: 1000
+                }
+            },
+            // Store calculated styles for Graphics Handler to track, but don't apply them yet
+            calculatedStyles: {
                 width: `${constrainedDimensions.width}px`,
                 height: `${constrainedDimensions.height}px`,
                 left: `${constrainedDimensions.x || this.startDimensions.x}px`,
@@ -255,12 +272,6 @@ class ResizeableBehavior {
             },
             animation: {
                 duration: 0 // Immediate for smooth live resize
-            },
-            overlay: {
-                update: true,
-                dimensions: constrainedDimensions,
-                showDimensions: true,
-                dimensionText: `${Math.round(constrainedDimensions.width)} × ${Math.round(constrainedDimensions.height)}`
             },
             options: {
                 priority: 'high',

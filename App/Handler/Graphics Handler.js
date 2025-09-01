@@ -916,12 +916,14 @@ class GraphicsHandler {
                 
                 if (resizeResult.success && resizeResult.graphics_request) {
                     // Capture the calculated dimensions from the resize operation
-                    if (resizeResult.graphics_request.styles) {
+                    // Use calculatedStyles (for preview) or styles (for direct application)
+                    const dimensionSource = resizeResult.graphics_request.calculatedStyles || resizeResult.graphics_request.styles;
+                    if (dimensionSource) {
                         latestCalculatedDimensions = {
-                            width: parseInt(resizeResult.graphics_request.styles.width) || container.offsetWidth,
-                            height: parseInt(resizeResult.graphics_request.styles.height) || container.offsetHeight,
-                            x: parseInt(resizeResult.graphics_request.styles.left) || container.offsetLeft,
-                            y: parseInt(resizeResult.graphics_request.styles.top) || container.offsetTop
+                            width: parseInt(dimensionSource.width) || container.offsetWidth,
+                            height: parseInt(dimensionSource.height) || container.offsetHeight,
+                            x: parseInt(dimensionSource.left) || container.offsetLeft,
+                            y: parseInt(dimensionSource.top) || container.offsetTop
                         };
                     }
                     this.executeRequest(resizeResult.graphics_request);
@@ -2272,16 +2274,52 @@ class GraphicsHandler {
                 // Apply overlay styles
                 Object.assign(previewElement.style, overlay.styles);
                 
-                // Position based on dimensions
+                // Position based on dimensions relative to parent container
                 if (overlay.dimensions) {
-                    previewElement.style.left = `${overlay.dimensions.x}px`;
-                    previewElement.style.top = `${overlay.dimensions.y}px`;
-                    previewElement.style.width = `${overlay.dimensions.width}px`;
-                    previewElement.style.height = `${overlay.dimensions.height}px`;
+                    // Find the component element to get its parent container
+                    const componentElement = document.getElementById(componentId);
+                    let parentContainer = null;
+                    
+                    if (componentElement) {
+                        // Look for canvas-area parent (the main container)
+                        parentContainer = componentElement.closest('.canvas-area') || 
+                                        componentElement.closest('[data-drop-zone="true"]') ||
+                                        componentElement.parentElement;
+                    }
+                    
+                    if (parentContainer) {
+                        // The dimensions from ResizeableBehavior are already relative to the positioned parent
+                        // (using offsetLeft/offsetTop), so we can use them directly
+                        previewElement.style.left = `${overlay.dimensions.x}px`;
+                        previewElement.style.top = `${overlay.dimensions.y}px`;
+                        previewElement.style.width = `${overlay.dimensions.width}px`;
+                        previewElement.style.height = `${overlay.dimensions.height}px`;
+                        
+                        // Append to parent container for relative positioning
+                        parentContainer.appendChild(previewElement);
+                        
+                        console.log(`🎯 Resize preview positioned relative to parent:`, {
+                            componentId,
+                            parentContainer: parentContainer.id || parentContainer.className,
+                            relativeCoords: { x: overlay.dimensions.x, y: overlay.dimensions.y },
+                            dimensions: { width: overlay.dimensions.width, height: overlay.dimensions.height }
+                        });
+                    } else {
+                        // Fallback to absolute positioning if parent not found
+                        previewElement.style.left = `${overlay.dimensions.x}px`;
+                        previewElement.style.top = `${overlay.dimensions.y}px`;
+                        previewElement.style.width = `${overlay.dimensions.width}px`;
+                        previewElement.style.height = `${overlay.dimensions.height}px`;
+                        
+                        // Append to body as fallback
+                        document.body.appendChild(previewElement);
+                        
+                        console.warn(`⚠️ Parent container not found for ${componentId}, using absolute positioning`);
+                    }
+                } else {
+                    // No dimensions provided, append to body
+                    document.body.appendChild(previewElement);
                 }
-                
-                // Append to body for top-level positioning
-                document.body.appendChild(previewElement);
             }
 
             return { 
