@@ -498,6 +498,12 @@ class GraphicsHandler {
         if (!element) {
             return { success: false, error: `Element not found: ${componentId}` };
         }
+        
+        // Validate that this element should have resize handles
+        if (!this.shouldHaveResizeHandles(element)) {
+            console.warn(`🚫 Element ${componentId} should not have resize handles - skipping`);
+            return { success: false, error: 'Element type not allowed to have resize handles' };
+        }
 
         const handlesContainer = element.querySelector('.resize-handles-container') || 
                                this.createResizeHandlesContainer(element, componentId);
@@ -547,6 +553,57 @@ class GraphicsHandler {
         element.appendChild(handlesContainer);
         
         return handlesContainer;
+    }
+
+    /**
+     * Check if an element should have resize handles
+     */
+    shouldHaveResizeHandles(element) {
+        // Only BaseUserContainer elements should have resize handles
+        if (element.getAttribute('data-component-type') === 'BaseUserContainer') {
+            return true;
+        }
+        
+        // Explicitly deny resize handles for canvas and system elements
+        if (element.id === 'canvas-area' || 
+            element.classList.contains('canvas') ||
+            element.classList.contains('form-builder-canvas') ||
+            element.classList.contains('tools-container') ||
+            element.classList.contains('app-root')) {
+            return false;
+        }
+        
+        // Default to false for safety
+        return false;
+    }
+
+    /**
+     * Update resize handles container position to match parent element
+     */
+    updateResizeHandlesPosition(element) {
+        const handlesContainer = element.querySelector('.resize-handles-container');
+        if (!handlesContainer) {
+            return;
+        }
+        
+        // For child elements with relative positioning, we just need to ensure
+        // the parent maintains relative positioning
+        const elementPosition = window.getComputedStyle(element).position;
+        if (elementPosition === 'static') {
+            element.style.position = 'relative';
+        }
+        
+        // Reset the handles container to proper relative positioning
+        handlesContainer.style.cssText = `
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            right: -20px;
+            bottom: -20px;
+            pointer-events: auto;
+            z-index: 1000;
+            display: block;
+        `;
     }
 
     async showResizeHandlesForElement(handlesContainer, element, resizeHandles) {
@@ -666,39 +723,76 @@ class GraphicsHandler {
             
             console.log(`🎯 Resize handle ${position} mousedown - starting resize`);
             
-            // Find the parent container - improved logic
+            // Find the parent container - improved logic with better specificity
             let container = null;
             
             // Method 1: Look for resize handles container, then get its parent
             const handlesContainer = handle.closest('.resize-handles-container');
             if (handlesContainer && handlesContainer.parentElement) {
                 container = handlesContainer.parentElement;
-                console.log(`🔍 Found container via handles container: ${container.id}`);
-                console.log(`🔍 Container element:`, container);
-                console.log(`🔍 Container classes:`, container.className);
-                console.log(`🔍 Container data attributes:`, container.dataset);
-            }
-            
-            // Method 2: Look for any parent with an ID
-            if (!container) {
-                container = handle.closest('[id]');
-                if (container && container.classList.contains('resize-handles-container')) {
-                    // This is the handles container, get its parent
-                    container = container.parentElement;
+                
+                // Ensure this is actually a BaseUserContainer, not some other element
+                if (container.dataset.componentType === 'BaseUserContainer' || 
+                    container.id.startsWith('element_') ||
+                    container.classList.contains('base-user-container')) {
+                    console.log(`🔍 Found BaseUserContainer via handles container: ${container.id}`);
+                } else {
+                    console.log(`⚠️ Found non-container element via handles: ${container.id}, looking further...`);
+                    container = null; // Reset and try other methods
                 }
-                console.log(`🔍 Found container via closest ID: ${container?.id || 'none'}`);
             }
             
-            // Method 3: Look for container with specific patterns
+            // Method 2: Look specifically for BaseUserContainer with data-component-type
             if (!container) {
-                container = handle.closest('[id*="element_"], .base-user-container, [data-container-type]');
-                console.log(`🔍 Found container via pattern matching: ${container?.id || 'none'}`);
+                container = handle.closest('[data-component-type="BaseUserContainer"]');
+                if (container) {
+                    console.log(`🔍 Found container via component-type: ${container.id}`);
+                }
+            }
+            
+            // Method 3: Look for element with ID starting with 'element_'
+            if (!container) {
+                container = handle.closest('[id^="element_"]');
+                if (container) {
+                    console.log(`🔍 Found container via element_ ID pattern: ${container.id}`);
+                }
+            }
+            
+            // Method 4: Look for container with base-user-container class
+            if (!container) {
+                container = handle.closest('.base-user-container');
+                if (container) {
+                    console.log(`🔍 Found container via base-user-container class: ${container.id}`);
+                }
             }
             
             if (!container || !container.id) {
                 console.warn('❌ No parent container found for resize handle');
                 return;
             }
+            
+            // Additional validation: ensure we're not targeting canvas or other non-container elements
+            if (container.id === 'canvas-area' || 
+                container.classList.contains('canvas') ||
+                container.classList.contains('form-builder-canvas')) {
+                console.warn('❌ Resize handle targeting canvas element instead of container. Searching for proper container...');
+                
+                // Look for actual container within the canvas
+                const actualContainer = container.querySelector('[data-component-type="BaseUserContainer"]');
+                if (actualContainer) {
+                    container = actualContainer;
+                    console.log(`✅ Found actual container within canvas: ${container.id}`);
+                } else {
+                    console.error('❌ No BaseUserContainer found within canvas');
+                    return;
+                }
+            }
+            
+            console.log(`🎯 Final container selected for resize: ${container.id}`, {
+                tagName: container.tagName,
+                classes: container.className,
+                dataAttributes: container.dataset
+            });
             
             // Get container's ResizeableBehavior
             const containerId = container.id;
@@ -804,6 +898,9 @@ class GraphicsHandler {
         const startY = startEvent.clientY;
         const startRect = container.getBoundingClientRect();
         
+        // Track the latest calculated dimensions from performResize
+        let latestCalculatedDimensions = null;
+        
         console.log(`🎯 Starting resize tracking for ${container.id}`);
         
         // Mouse move handler for live resize
@@ -818,6 +915,15 @@ class GraphicsHandler {
                 });
                 
                 if (resizeResult.success && resizeResult.graphics_request) {
+                    // Capture the calculated dimensions from the resize operation
+                    if (resizeResult.graphics_request.styles) {
+                        latestCalculatedDimensions = {
+                            width: parseInt(resizeResult.graphics_request.styles.width) || container.offsetWidth,
+                            height: parseInt(resizeResult.graphics_request.styles.height) || container.offsetHeight,
+                            x: parseInt(resizeResult.graphics_request.styles.left) || container.offsetLeft,
+                            y: parseInt(resizeResult.graphics_request.styles.top) || container.offsetTop
+                        };
+                    }
                     this.executeRequest(resizeResult.graphics_request);
                 }
             }
@@ -836,16 +942,29 @@ class GraphicsHandler {
             
             // End resize operation
             if (containerInstance.resizeableBehavior) {
-                const endResult = containerInstance.resizeableBehavior.endResize({
-                    finalDimensions: {
-                        width: container.offsetWidth,
-                        height: container.offsetHeight,
-                        x: container.offsetLeft,
-                        y: container.offsetTop
-                    }
+                // Use the latest calculated dimensions from performResize, or fallback to current dimensions
+                const finalDimensions = latestCalculatedDimensions || {
+                    width: container.offsetWidth,
+                    height: container.offsetHeight,
+                    x: container.offsetLeft,
+                    y: container.offsetTop
+                };
+                console.log(`🎯 Graphics Handler: Using calculated finalDimensions:`, finalDimensions);
+                console.log(`🎯 Graphics Handler: Current element dimensions for comparison:`, {
+                    width: container.offsetWidth,
+                    height: container.offsetHeight,
+                    x: container.offsetLeft,
+                    y: container.offsetTop
                 });
                 
+                const endResult = containerInstance.resizeableBehavior.endResize({
+                    finalDimensions
+                });
+                
+                console.log(`🎯 Graphics Handler: ResizeableBehavior.endResize result:`, endResult);
+                
                 if (endResult.success && endResult.graphics_request) {
+                    console.log(`🎯 Graphics Handler: Executing resize complete request:`, endResult.graphics_request);
                     this.executeRequest(endResult.graphics_request);
                 }
             }
@@ -1178,6 +1297,11 @@ class GraphicsHandler {
         
         // Apply styles efficiently
         Object.assign(element.style, styles);
+        
+        // Update resize handles container position if it exists and position-related styles changed
+        if (styles.left !== undefined || styles.top !== undefined || styles.width !== undefined || styles.height !== undefined) {
+            this.updateResizeHandlesPosition(element);
+        }
     }
 
     /**
@@ -2187,11 +2311,26 @@ class GraphicsHandler {
                 return { success: false, error: `Element not found: ${componentId}` };
             }
 
-            // Find the resize handles container - this should be the actual resize target
-            const handlesContainer = element.querySelector('.resize-handles-container');
-            const resizeTarget = handlesContainer || element;
+            // Additional validation to ensure element is valid
+            if (!element.tagName || !element.style) {
+                console.error(`❌ Invalid element found: ${componentId}`, element);
+                return { success: false, error: `Invalid element: ${componentId}` };
+            }
 
-            console.log(`🎯 RESIZE COMPLETE: Applying styles to element:`, {
+            // Always apply resize styles to the main element, not the handles container
+            // The handles container should remain positioned relative to the main element
+            const resizeTarget = element;
+
+            console.log(`🔍 ELEMENT VALIDATION:`, {
+                element: element,
+                elementType: typeof element,
+                tagName: element?.tagName,
+                id: element?.id,
+                hasStyle: !!element?.style,
+                resizeTarget: resizeTarget,
+                resizeTargetType: typeof resizeTarget
+            });
+            console.log(`🎯 RESIZE COMPLETE: Applying styles to main element:`, {
                 componentId,
                 mainElement: element,
                 resizeTarget,
@@ -2204,7 +2343,11 @@ class GraphicsHandler {
                     left: resizeTarget.offsetLeft,
                     top: resizeTarget.offsetTop
                 },
-                newStyles: styles
+                newStyles: styles,
+                stylesType: typeof styles,
+                stylesKeys: styles ? Object.keys(styles) : 'N/A',
+                hasAnimation: !!animation,
+                animationDuration: animation?.duration
             });
 
             // Remove resize preview overlay
@@ -2214,8 +2357,12 @@ class GraphicsHandler {
             }
 
             // Apply final styles with animation if specified
+            console.log(`🔍 STYLES CHECK: styles =`, styles, `truthy =`, !!styles);
+            console.log(`🔍 ANIMATION CHECK: animation =`, animation, `hasAnimation =`, !!animation, `duration =`, animation?.duration);
             if (styles) {
+                console.log(`✅ Styles exist, proceeding with application`);
                 if (animation && animation.duration > 0) {
+                    console.log(`🎭 ANIMATION PATH: Using animated style application with duration ${animation.duration}ms`);
                     // Animate to final state on the resize target
                     resizeTarget.style.transition = `all ${animation.duration}ms ${animation.easing || 'ease-in-out'}`;
                     
@@ -2233,8 +2380,47 @@ class GraphicsHandler {
                     }, animation.duration + 50);
                 } else {
                     // Apply styles immediately to the resize target
+                    console.log(`🎯 APPLYING RESIZE STYLES:`, {
+                        targetElement: resizeTarget,
+                        targetId: resizeTarget.id,
+                        targetTagName: resizeTarget.tagName,
+                        targetClasses: resizeTarget.className,
+                        styles: styles,
+                        beforeResize: {
+                            width: resizeTarget.style.width,
+                            height: resizeTarget.style.height,
+                            left: resizeTarget.style.left,
+                            top: resizeTarget.style.top
+                        }
+                    });
+                    
                     Object.assign(resizeTarget.style, styles);
+                    
+                    console.log(`✅ RESIZE STYLES APPLIED:`, {
+                        targetElement: resizeTarget,
+                        resizeTargetIsNull: resizeTarget === null,
+                        resizeTargetType: typeof resizeTarget,
+                        afterResize: {
+                            width: resizeTarget.style.width,
+                            height: resizeTarget.style.height,
+                            left: resizeTarget.style.left,
+                            top: resizeTarget.style.top
+                        },
+                        actualBoundingRect: resizeTarget.getBoundingClientRect(),
+                        computedStyles: {
+                            width: getComputedStyle(resizeTarget).width,
+                            height: getComputedStyle(resizeTarget).height,
+                            left: getComputedStyle(resizeTarget).left,
+                            top: getComputedStyle(resizeTarget).top
+                        }
+                    });
                 }
+                
+                // Update resize handles positioning after applying styles
+                this.updateResizeHandlesPosition(element);
+            } else {
+                console.log(`❌ NO STYLES PROVIDED - resize complete called without styles to apply`);
+                console.log(`   This means the resize operation calculated no final dimensions`);
             }
 
             return { 
