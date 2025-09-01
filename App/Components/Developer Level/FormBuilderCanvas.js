@@ -789,6 +789,14 @@ class FormBuilderCanvas extends BaseContainer {
                 
                 const signInComponent = new NativeSignIn(formElement.id, this, signInConfig);
                 
+                // Ensure the component is properly initialized with NativeSignIn-specific structure
+                if (signInComponent.initialize) {
+                    const initResult = signInComponent.initialize();
+                    if (!initResult) {
+                        console.warn('⚠️ NativeSignIn initialization failed');
+                    }
+                }
+                
                 // Store the component instance reference
                 this.componentInstances = this.componentInstances || new Map();
                 this.componentInstances.set(formElement.id, signInComponent);

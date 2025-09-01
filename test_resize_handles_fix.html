@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resize Handles Fix Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .test-container {
+            position: absolute;
+            left: 520px;
+            top: 300px;
+            width: 200px;
+            height: 100px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: rgba(0, 0, 0, 0.15) 0px 4px 12px;
+            border: none;
+            padding: 0px;
+            z-index: 100;
+        }
+        .resize-handles-container {
+            position: absolute;
+            top: -20px;
+            left: -20px;
+            right: -20px;
+            bottom: -20px;
+            pointer-events: auto;
+            z-index: 1000;
+            display: block;
+        }
+        .resize-handle {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(52, 152, 219, 0.3);
+            border: 1px solid #3498db;
+            border-radius: 2px;
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .resize-handle-nw { top: -20px; left: -20px; cursor: nw-resize; }
+        .resize-handle-n { top: -20px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+        .resize-handle-ne { top: -20px; right: -20px; cursor: ne-resize; }
+        .resize-handle-e { top: 50%; right: -20px; transform: translateY(-50%); cursor: e-resize; }
+        .resize-handle-se { bottom: -20px; right: -20px; cursor: se-resize; }
+        .resize-handle-s { bottom: -20px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+        .resize-handle-sw { bottom: -20px; left: -20px; cursor: sw-resize; }
+        .resize-handle-w { top: 50%; left: -20px; transform: translateY(-50%); cursor: w-resize; }
+        
+        .controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 2000;
+        }
+        
+        button {
+            margin: 5px;
+            padding: 8px 12px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <h3>Resize Handles Test</h3>
+        <button onclick="moveContainer()">Move Container</button>
+        <button onclick="resizeContainer()">Resize Container</button>
+        <button onclick="checkAlignment()">Check Alignment</button>
+        <button onclick="fixAlignment()">Fix Alignment</button>
+        <div id="status"></div>
+    </div>
+
+    <div id="test-container" class="test-container">
+        <div class="resize-handles-container">
+            <div class="resize-handle resize-handle-nw"></div>
+            <div class="resize-handle resize-handle-n"></div>
+            <div class="resize-handle resize-handle-ne"></div>
+            <div class="resize-handle resize-handle-e"></div>
+            <div class="resize-handle resize-handle-se"></div>
+            <div class="resize-handle resize-handle-s"></div>
+            <div class="resize-handle resize-handle-sw"></div>
+            <div class="resize-handle resize-handle-w"></div>
+        </div>
+        <div style="padding: 20px;">Test Container</div>
+    </div>
+
+    <script>
+        function moveContainer() {
+            const container = document.getElementById('test-container');
+            const newLeft = 100 + Math.random() * 500;
+            const newTop = 50 + Math.random() * 400;
+            
+            container.style.left = newLeft + 'px';
+            container.style.top = newTop + 'px';
+            
+            updateStatus(`Moved to: ${newLeft}px, ${newTop}px`);
+            
+            // Check if handles are still aligned
+            setTimeout(checkAlignment, 100);
+        }
+        
+        function resizeContainer() {
+            const container = document.getElementById('test-container');
+            const newWidth = 150 + Math.random() * 300;
+            const newHeight = 80 + Math.random() * 200;
+            
+            container.style.width = newWidth + 'px';
+            container.style.height = newHeight + 'px';
+            
+            updateStatus(`Resized to: ${newWidth}px × ${newHeight}px`);
+            
+            // Check if handles are still aligned
+            setTimeout(checkAlignment, 100);
+        }
+        
+        function checkAlignment() {
+            const container = document.getElementById('test-container');
+            const handlesContainer = container.querySelector('.resize-handles-container');
+            
+            const containerRect = container.getBoundingClientRect();
+            const handlesRect = handlesContainer.getBoundingClientRect();
+            
+            const expectedLeft = containerRect.left - 20;
+            const expectedTop = containerRect.top - 20;
+            const expectedWidth = containerRect.width + 40;
+            const expectedHeight = containerRect.height + 40;
+            
+            const leftDiff = Math.abs(handlesRect.left - expectedLeft);
+            const topDiff = Math.abs(handlesRect.top - expectedTop);
+            const widthDiff = Math.abs(handlesRect.width - expectedWidth);
+            const heightDiff = Math.abs(handlesRect.height - expectedHeight);
+            
+            const isAligned = leftDiff < 1 && topDiff < 1 && widthDiff < 1 && heightDiff < 1;
+            
+            updateStatus(`Alignment: ${isAligned ? '✅ GOOD' : '❌ MISALIGNED'} (L:${leftDiff.toFixed(1)}, T:${topDiff.toFixed(1)}, W:${widthDiff.toFixed(1)}, H:${heightDiff.toFixed(1)})`);
+            
+            return isAligned;
+        }
+        
+        function fixAlignment() {
+            const container = document.getElementById('test-container');
+            const handlesContainer = container.querySelector('.resize-handles-container');
+            
+            // Force proper relative positioning
+            container.style.position = 'absolute';
+            handlesContainer.style.cssText = `
+                position: absolute;
+                top: -20px;
+                left: -20px;
+                right: -20px;
+                bottom: -20px;
+                pointer-events: auto;
+                z-index: 1000;
+                display: block;
+            `;
+            
+            updateStatus('🔧 Fixed alignment - reset to relative positioning');
+            
+            // Check alignment after fix
+            setTimeout(checkAlignment, 100);
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').innerHTML = `<small>${new Date().toLocaleTimeString()}: ${message}</small>`;
+        }
+        
+        // Initialize
+        updateStatus('Ready - Click buttons to test resize handles alignment');
+        setTimeout(checkAlignment, 500);
+    </script>
+</body>
+</html>

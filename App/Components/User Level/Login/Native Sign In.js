@@ -89,6 +89,11 @@ class NativeSignIn extends BaseUserContainer {
             // Initialize authentication state
             this._resetAuthenticationState();
             
+            // Request initial styling through Graphics Handler
+            if (this.behavior && this.behavior.applyInitialStyling) {
+                this.behavior.applyInitialStyling();
+            }
+            
             console.log(`✅ NativeSignIn ${this.containerId} initialized successfully`);
             return true;
             
@@ -112,7 +117,7 @@ class NativeSignIn extends BaseUserContainer {
         this.element.setAttribute('data-component-type', 'NativeSignIn');
         this.element.setAttribute('data-auth-state', this.authenticationState);
         
-        // Create inner structure (DOM only, no styling)
+        // Create inner structure (DOM structure ONLY - NO styling)
         this.element.innerHTML = `
             <div class="signin-header" data-element="header">
                 <div class="signin-title" data-element="title">Sign In</div>
@@ -133,27 +138,28 @@ class NativeSignIn extends BaseUserContainer {
             <div class="provider-section" data-element="provider-section">
                 <div class="provider-divider" data-element="divider">
                     <span data-element="divider-text">or sign in with</span>
+                    <div data-element="divider-line"></div>
                 </div>
                 <div class="provider-buttons" data-element="provider-buttons">
                     <button class="provider-button" data-provider="amazon" data-element="amazon-button">
-                        <span data-element="amazon-icon"></span>
+                        <span data-element="amazon-icon">📦</span>
                         <span data-element="amazon-text">Amazon</span>
                     </button>
                     <button class="provider-button" data-provider="apple" data-element="apple-button">
-                        <span data-element="apple-icon"></span>
+                        <span data-element="apple-icon">🍎</span>
                         <span data-element="apple-text">Apple</span>
                     </button>
                     <button class="provider-button" data-provider="azure" data-element="azure-button">
-                        <span data-element="azure-icon"></span>
+                        <span data-element="azure-icon">🏢</span>
                         <span data-element="azure-text">Microsoft</span>
                     </button>
                     <button class="provider-button" data-provider="facebook" data-element="facebook-button">
-                        <span data-element="facebook-icon"></span>
+                        <span data-element="facebook-icon">📘</span>
                         <span data-element="facebook-text">Facebook</span>
                     </button>
                     <button class="provider-button" data-provider="google" data-element="google-button">
-                        <span data-element="google-icon"></span>
-                        <span data-element="google-text">Google</span>
+                        <span data-element="google-icon">🔵</span>
+                        <span data-element="google-text">Continue with Google</span>
                     </button>
                 </div>
             </div>
@@ -187,6 +193,60 @@ class NativeSignIn extends BaseUserContainer {
             statusMessage: this.element.querySelector('[data-element="status-message"]'),
             statusDetails: this.element.querySelector('[data-element="status-details"]')
         };
+    }
+    
+    /**
+     * Updates component visuals through Graphics Handler
+     * @param {Object} visualRequest - Visual update request
+     */
+    updateVisuals(visualRequest) {
+        if (!this.element || !visualRequest) return false;
+        
+        try {
+            // Send visual update request to Graphics Handler via behavior
+            if (this.behavior && this.behavior.requestVisualUpdate) {
+                this.behavior.requestVisualUpdate(visualRequest);
+                return true;
+            }
+            
+            console.warn('⚠️ NativeSignIn: No behavior or requestVisualUpdate method available');
+            return false;
+            
+        } catch (error) {
+            console.error('❌ NativeSignIn visual update error:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * Requests QR code visual update through Graphics Handler
+     */
+    updateQRCode(qrSvg) {
+        if (!qrSvg) return false;
+        
+        const visualRequest = {
+            action: 'update_qr_code',
+            element: this.element.querySelector('[data-element="qr-code"]'),
+            svg_content: qrSvg,
+            animation: 'fade-in'
+        };
+        
+        return this.updateVisuals(visualRequest);
+    }
+    
+    /**
+     * Requests status update through Graphics Handler
+     */
+    updateAuthStatus(status, message, details = '') {
+        const visualRequest = {
+            action: 'update_auth_status',
+            element: this.element.querySelector('[data-element="auth-status"]'),
+            status: status,
+            message: message,
+            details: details
+        };
+        
+        return this.updateVisuals(visualRequest);
     }
     
     /**

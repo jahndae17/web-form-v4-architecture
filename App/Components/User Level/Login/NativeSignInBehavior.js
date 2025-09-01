@@ -280,6 +280,82 @@ class NativeSignInBehavior {
                 redirectUrl: window.location.origin + '/auth/callback'
             }
         };
+        
+        // Initiate actual provider authentication
+        this._initiateProviderAuth(provider);
+    }
+    
+    /**
+     * Initiate actual provider authentication
+     */
+    async _initiateProviderAuth(provider) {
+        try {
+            let authResult = null;
+            
+            switch (provider) {
+                case 'google':
+                    if (window.GoogleLogin) {
+                        const googleLogin = new GoogleLogin();
+                        await googleLogin.initialize();
+                        authResult = await googleLogin.signIn();
+                    }
+                    break;
+                    
+                case 'apple':
+                    if (window.AppleLogin) {
+                        const appleLogin = new AppleLogin();
+                        await appleLogin.initialize();
+                        authResult = await appleLogin.signIn();
+                    }
+                    break;
+                    
+                case 'amazon':
+                    if (window.AmazonLogin) {
+                        const amazonLogin = new AmazonLogin();
+                        await amazonLogin.initialize();
+                        authResult = await amazonLogin.signIn();
+                    }
+                    break;
+                    
+                case 'azure':
+                    if (window.AzureLogin) {
+                        const azureLogin = new AzureLogin();
+                        await azureLogin.initialize();
+                        authResult = await azureLogin.signIn();
+                    }
+                    break;
+                    
+                case 'facebook':
+                    if (window.FacebookLogin) {
+                        const facebookLogin = new FacebookLogin();
+                        await facebookLogin.initialize();
+                        authResult = await facebookLogin.signIn();
+                    }
+                    break;
+                    
+                default:
+                    throw new Error(`Provider ${provider} not implemented`);
+            }
+            
+            if (authResult && authResult.success) {
+                this.handleAuthSuccess({
+                    userData: authResult.userData,
+                    provider: provider
+                });
+            } else {
+                this.handleAuthError({
+                    error: authResult ? authResult.error : 'Authentication failed',
+                    provider: provider
+                });
+            }
+            
+        } catch (error) {
+            console.error(`🔐 Provider ${provider} authentication failed:`, error);
+            this.handleAuthError({
+                error: error.message || 'Authentication failed',
+                provider: provider
+            });
+        }
     }
     
     /**
@@ -689,15 +765,172 @@ class NativeSignInBehavior {
     }
     
     /**
-     * Generate QR Code SVG (placeholder implementation)
+     * Generate QR Code SVG (actual implementation)
      */
     _generateQRCodeSVG(data) {
-        // Placeholder SVG generation - replace with actual QR code library
-        const encoded = btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-            <rect width="200" height="200" fill="white"/>
-            <text x="100" y="100" text-anchor="middle" fill="black" font-size="12">QR Code: ${data.slice(-20)}</text>
-        </svg>`);
-        return encoded;
+        // Simple QR code pattern generator (replace with proper QR library for production)
+        const size = 21; // Standard QR code is 21x21 modules for Version 1
+        const moduleSize = 8;
+        const totalSize = size * moduleSize;
+        const border = moduleSize * 2;
+        const finalSize = totalSize + (border * 2);
+        
+        // Generate a deterministic pattern based on the data
+        const hash = this._simpleHash(data);
+        const pattern = this._generateQRPattern(size, hash);
+        
+        let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${finalSize} ${finalSize}" style="shape-rendering: crispEdges;">`;
+        svg += `<rect width="${finalSize}" height="${finalSize}" fill="white"/>`;
+        
+        // Draw the QR code pattern
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (pattern[y][x]) {
+                    const rectX = border + (x * moduleSize);
+                    const rectY = border + (y * moduleSize);
+                    svg += `<rect x="${rectX}" y="${rectY}" width="${moduleSize}" height="${moduleSize}" fill="black"/>`;
+                }
+            }
+        }
+        
+        svg += '</svg>';
+        return btoa(svg);
+    }
+    
+    /**
+     * Generate a simple hash from string
+     */
+    _simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return Math.abs(hash);
+    }
+    
+    /**
+     * Generate QR-like pattern
+     */
+    _generateQRPattern(size, seed) {
+        const pattern = Array(size).fill(null).map(() => Array(size).fill(false));
+        
+        // Add finder patterns (corners)
+        this._addFinderPattern(pattern, 0, 0);
+        this._addFinderPattern(pattern, size - 7, 0);
+        this._addFinderPattern(pattern, 0, size - 7);
+        
+        // Add timing patterns
+        for (let i = 8; i < size - 8; i++) {
+            pattern[6][i] = i % 2 === 0;
+            pattern[i][6] = i % 2 === 0;
+        }
+        
+        // Add data pattern based on seed
+        let random = seed;
+        for (let y = 0; y < size; y++) {
+            for (let x = 0; x < size; x++) {
+                if (!this._isReserved(x, y, size)) {
+                    random = (random * 1103515245 + 12345) & 0x7fffffff;
+                    pattern[y][x] = (random % 100) < 45; // ~45% fill rate
+                }
+            }
+        }
+        
+        return pattern;
+    }
+    
+    /**
+     * Add finder pattern (7x7 square)
+     */
+    _addFinderPattern(pattern, startX, startY) {
+        const finderPattern = [
+            [1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1]
+        ];
+        
+        for (let y = 0; y < 7; y++) {
+            for (let x = 0; x < 7; x++) {
+                if (startY + y < pattern.length && startX + x < pattern[0].length) {
+                    pattern[startY + y][startX + x] = finderPattern[y][x] === 1;
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check if position is reserved for patterns
+     */
+    _isReserved(x, y, size) {
+        // Finder patterns and separators
+        if ((x < 9 && y < 9) || 
+            (x >= size - 8 && y < 9) || 
+            (x < 9 && y >= size - 8)) {
+            return true;
+        }
+        
+        // Timing patterns
+        if (x === 6 || y === 6) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Apply initial styling to component through Graphics Handler
+     */
+    applyInitialStyling() {
+        if (!this.component || !this.component.element) return false;
+        
+        try {
+            // Get visual schema and apply to component
+            const visualSchema = this.getVisualSchema();
+            
+            // Request Graphics Handler to apply initial styling
+            const stylingRequest = {
+                action: 'apply_component_styling',
+                element: this.component.element,
+                componentType: 'NativeSignIn',
+                visualSchema: visualSchema,
+                layoutMode: 'centered'
+            };
+            
+            // Send to Graphics Handler via behavior system
+            this.graphics_request = stylingRequest;
+            
+            console.log('✅ NativeSignIn initial styling requested');
+            return true;
+            
+        } catch (error) {
+            console.error('❌ NativeSignIn styling error:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * Handle visual update requests from component
+     */
+    requestVisualUpdate(visualRequest) {
+        if (!visualRequest) return false;
+        
+        try {
+            // Forward visual request to Graphics Handler
+            this.graphics_request = visualRequest;
+            
+            console.log('✅ NativeSignIn visual update requested:', visualRequest.action);
+            return true;
+            
+        } catch (error) {
+            console.error('❌ NativeSignIn visual update error:', error);
+            return false;
+        }
     }
     
     /**

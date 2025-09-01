@@ -87,6 +87,14 @@ element.style.transform = 'translateX(100px)';
 element.animate({ opacity: 0 }, 300);
 element.style.zIndex = 1000;
 element.classList.add('highlight');
+
+// ❌ WRONG - Don't use absolute viewport positioning
+element.style.left = event.clientX + 'px';  // Absolute to viewport
+element.style.top = event.clientY + 'px';   // Absolute to viewport
+element.style.position = 'fixed';           // Fixed to viewport
+
+// ❌ WRONG - Don't use document.body for positioning
+document.body.appendChild(overlay);          // Should append to parent container
 ```
 
 ### ❌ NO CSS Files or Direct Styling
@@ -179,7 +187,11 @@ class MyBehavior {
         styles: { 
           border: '2px solid green',
           backgroundColor: '#f0fff0',
-          boxShadow: '0 2px 4px rgba(0,255,0,0.3)'
+          boxShadow: '0 2px 4px rgba(0,255,0,0.3)',
+          // 🎯 COORDINATES: All positioning MUST be relative to parent container
+          left: '20px',    // Relative to positioned parent, NOT viewport
+          top: '10px',     // Relative to positioned parent, NOT viewport
+          position: 'absolute'  // Within parent context only
         },
         classes: {
           add: ['saved', 'success'],
@@ -196,7 +208,9 @@ class MyBehavior {
         backgroundColor: '#ffffff',
         border: '1px solid #ccc',
         borderRadius: '4px',
-        padding: '8px'
+        padding: '8px',
+        // 🎯 POSITIONING: Always relative to parent container
+        position: 'relative'  // Default positioning context
       },
       stateStyles: {
         editing: { border: '2px solid #007acc', backgroundColor: '#f8fcff' },
@@ -206,6 +220,12 @@ class MyBehavior {
       animations: {
         highlight: { duration: 300, easing: 'ease-in-out' },
         focus: { duration: 150, easing: 'ease-out' }
+      },
+      // 🎯 COORDINATE SYSTEM: Define relative positioning context
+      coordinateSystem: {
+        positioningParent: 'canvas-area',  // Parent container for relative positioning
+        useRelativeCoords: true,           // All coordinates relative to parent
+        preventViewportPositioning: true   // Never position relative to viewport
       }
     };
   }
@@ -284,7 +304,11 @@ ChangeLog: "Recording animation state and component update"
     styles: {                       // Direct style properties
       backgroundColor: '#f0f0f0',
       border: '1px solid #ccc',
-      borderRadius: '4px'
+      borderRadius: '4px',
+      // 🎯 CRITICAL: All coordinates MUST be relative to parent container
+      left: '50px',                 // Relative to positioned parent (e.g., canvas-area)
+      top: '25px',                  // Relative to positioned parent
+      position: 'absolute'          // Within parent context, NOT viewport
     },
     classes: {                      // CSS class management
       add: ['active', 'highlighted'],
@@ -295,9 +319,17 @@ ChangeLog: "Recording animation state and component update"
       width: { from: '200px', to: '0px' },
       opacity: { from: 1, to: 0 },
       duration: 300,
-      easing: 'ease-in-out'
+      easing: 'ease-in-out',
+      // 🎯 COORDINATE SYSTEM: Animation coordinates also relative to parent
+      transform: { 
+        from: 'translateX(0px)',    // Relative movement within parent
+        to: 'translateX(100px)'     // Relative movement within parent
+      }
     },
     zIndex: 150,                    // Z-index management
+    // 🎯 POSITIONING CONTEXT: Specify parent container for relative positioning
+    parentContainer: 'canvas-area', // ID of parent for relative positioning
+    coordinateSystem: 'relative',    // 'relative' (to parent) | NEVER 'viewport'
     options: {
       priority: 'high',             // high | normal | low
       batch: true,                  // Batch with other updates
@@ -320,6 +352,14 @@ ChangeLog: "Recording animation state and component update"
 - Graphics Handler maintains comprehensive visual state and coordination
 - Components request visual changes, Graphics Handler executes them
 - Behavior files specify visual requirements, Graphics Handler implements them
+
+**Coordinates are RELATIVE, not ABSOLUTE**
+- ALL positioning MUST be relative to parent containers (e.g., canvas-area)
+- NEVER use viewport-based positioning (clientX/clientY, fixed positioning)
+- Components use offsetLeft/offsetTop for relative coordinate calculations
+- Graphics Handler positions elements within parent containers, not document.body
+- Overlays and previews are appended to parent containers for relative positioning
+- Coordinate systems are consistent across resize, move, and animation operations
 
 **State is COORDINATED, not ISOLATED**
 - ChangeLog maintains all system state including visual state

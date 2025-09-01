@@ -129,7 +129,9 @@ class BaseUserContainer {
                     this.element.addEventListener('mousedown', (event) => {
                         if (!this.isDesignMode()) return;
                         
-                        mouseDownPosition = { x: event.clientX, y: event.clientY };
+                        // Convert viewport coordinates to parent-relative coordinates
+                        const parentRelativePosition = this._convertToParentRelativeCoords(event.clientX, event.clientY);
+                        mouseDownPosition = parentRelativePosition;
                         isTracking = true;
                         
                         // Start movement tracking (synchronous now)
@@ -157,7 +159,8 @@ class BaseUserContainer {
                     document.addEventListener('mousemove', (event) => {
                         if (!isTracking || !mouseDownPosition) return;
                         
-                        const currentPosition = { x: event.clientX, y: event.clientY };
+                        // Convert viewport coordinates to parent-relative coordinates
+                        const currentPosition = this._convertToParentRelativeCoords(event.clientX, event.clientY);
                         const result = this.movableBehavior.performMove({
                             position: currentPosition
                         });
@@ -178,7 +181,8 @@ class BaseUserContainer {
                         if (!isTracking) return;
                         
                         isTracking = false;
-                        const finalPosition = { x: event.clientX, y: event.clientY };
+                        // Convert viewport coordinates to parent-relative coordinates
+                        const finalPosition = this._convertToParentRelativeCoords(event.clientX, event.clientY);
                         
                         const result = this.movableBehavior.endMove({
                             finalPosition: finalPosition
@@ -305,7 +309,11 @@ class BaseUserContainer {
         
         // Ensure the element has the correct id and attributes
         this.element.id = this.containerId;
-        this.element.setAttribute('data-component-type', 'BaseUserContainer');
+        
+        // Set component type - use constructor name if available, otherwise default
+        const componentType = this.constructor.name !== 'BaseUserContainer' ? this.constructor.name : 'BaseUserContainer';
+        this.element.setAttribute('data-component-type', componentType);
+        
         this.element.setAttribute('data-user-type', this.userType);
         this.element.setAttribute('data-form-role', this.formRole);
         this.element.setAttribute('role', this.accessibilityRole);
@@ -1039,6 +1047,45 @@ class BaseUserContainer {
         }
         
         return { success: false, reason: 'No selection behavior available or not in design mode' };
+    }
+    
+    /**
+     * Convert viewport coordinates to parent-relative coordinates
+     * @param {number} clientX - Viewport X coordinate
+     * @param {number} clientY - Viewport Y coordinate
+     * @returns {Object} Parent-relative coordinates {x, y}
+     */
+    _convertToParentRelativeCoords(clientX, clientY) {
+        try {
+            // Find the canvas-area parent container
+            let parentContainer = this.element.closest('.canvas-area') || 
+                                this.element.closest('#canvas-area') ||
+                                this.element.parentElement;
+            
+            if (!parentContainer) {
+                console.warn('⚠️ BaseUserContainer: No parent container found, using document.body');
+                parentContainer = document.body;
+            }
+            
+            // Get parent container's position relative to viewport
+            const parentRect = parentContainer.getBoundingClientRect();
+            
+            // Convert viewport coordinates to parent-relative coordinates
+            const relativeX = clientX - parentRect.left;
+            const relativeY = clientY - parentRect.top;
+            
+            console.log(`🎯 Coordinate conversion: viewport(${clientX}, ${clientY}) → parent-relative(${relativeX}, ${relativeY})`);
+            
+            return {
+                x: relativeX,
+                y: relativeY
+            };
+            
+        } catch (error) {
+            console.error('❌ BaseUserContainer coordinate conversion error:', error);
+            // Fallback to viewport coordinates if conversion fails
+            return { x: clientX, y: clientY };
+        }
     }
 }
 

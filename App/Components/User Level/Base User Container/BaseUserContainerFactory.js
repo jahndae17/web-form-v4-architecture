@@ -10,32 +10,6 @@
  * ✅ ChangeLog integration for state synchronization
  */
 
-// Import dependencies based on environment
-let BaseUserContainer, BaseUserContainerBehavior, SelectableBehavior, ResizeableBehavior;
-
-if (typeof window !== 'undefined') {
-    // Browser environment - assume global classes
-    BaseUserContainer = window.BaseUserContainer;
-    BaseUserContainerBehavior = window.BaseUserContainerBehavior;
-    SelectableBehavior = window.SelectableBehavior;
-    ResizeableBehavior = window.ResizeableBehavior;
-    
-    // Debug dependency availability
-    console.log('🏭 BaseUserContainerFactory loading...');
-    console.log('Dependencies check:', {
-        BaseUserContainer: typeof BaseUserContainer,
-        BaseUserContainerBehavior: typeof BaseUserContainerBehavior,
-        SelectableBehavior: typeof SelectableBehavior,
-        ResizeableBehavior: typeof ResizeableBehavior
-    });
-} else if (typeof module !== 'undefined' && module.exports) {
-    // Node.js environment
-    BaseUserContainer = require('./BaseUserContainer.js');
-    BaseUserContainerBehavior = require('./BaseUserContainerBehavior.js');
-    SelectableBehavior = require('./SelectableBehavior.js');
-    ResizeableBehavior = require('./ResizeableBehavior.js');
-}
-
 class BaseUserContainerFactory {
     constructor() {
         this.instanceCounter = 0;

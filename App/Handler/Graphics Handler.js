@@ -802,11 +802,26 @@ class GraphicsHandler {
             if (containerInstance && containerInstance.resizeableBehavior) {
                 console.log(`✅ Found ResizeableBehavior for ${containerId}`);
                 
+                // Convert viewport coordinates to parent-relative coordinates
+                const parentContainer = container.closest('.canvas-area') || 
+                                      container.closest('#canvas-area') ||
+                                      container.parentElement;
+                
+                let relativeX, relativeY;
+                if (parentContainer) {
+                    const parentRect = parentContainer.getBoundingClientRect();
+                    relativeX = e.clientX - parentRect.left;
+                    relativeY = e.clientY - parentRect.top;
+                } else {
+                    relativeX = e.clientX;
+                    relativeY = e.clientY;
+                }
+                
                 // Start resize operation through ResizeableBehavior
                 const resizeResult = containerInstance.resizeableBehavior.startResize({
                     handle: position,
-                    clientX: e.clientX,
-                    clientY: e.clientY
+                    clientX: relativeX,
+                    clientY: relativeY
                 });
                 
                 console.log('🎯 Resize started:', resizeResult);
@@ -894,8 +909,22 @@ class GraphicsHandler {
      * Handle resize start - set up mouse tracking
      */
     handleResizeStart(container, position, startEvent, containerInstance) {
-        const startX = startEvent.clientX;
-        const startY = startEvent.clientY;
+        // Convert viewport coordinates to parent-relative coordinates
+        const parentContainer = container.closest('.canvas-area') || 
+                              container.closest('#canvas-area') ||
+                              container.parentElement;
+        
+        let startX, startY;
+        if (parentContainer) {
+            const parentRect = parentContainer.getBoundingClientRect();
+            startX = startEvent.clientX - parentRect.left;
+            startY = startEvent.clientY - parentRect.top;
+        } else {
+            // Fallback to viewport coordinates if no parent found
+            startX = startEvent.clientX;
+            startY = startEvent.clientY;
+        }
+        
         const startRect = container.getBoundingClientRect();
         
         // Track the latest calculated dimensions from performResize
@@ -909,9 +938,20 @@ class GraphicsHandler {
             e.stopPropagation();
             
             if (containerInstance.resizeableBehavior) {
+                // Convert viewport coordinates to parent-relative coordinates
+                let currentX, currentY;
+                if (parentContainer) {
+                    const parentRect = parentContainer.getBoundingClientRect();
+                    currentX = e.clientX - parentRect.left;
+                    currentY = e.clientY - parentRect.top;
+                } else {
+                    currentX = e.clientX;
+                    currentY = e.clientY;
+                }
+                
                 const resizeResult = containerInstance.resizeableBehavior.performResize({
-                    clientX: e.clientX,
-                    clientY: e.clientY
+                    clientX: currentX,
+                    clientY: currentY
                 });
                 
                 if (resizeResult.success && resizeResult.graphics_request) {

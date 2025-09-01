@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Canvas Resize Issue</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f0f0f0;
+        }
+        
+        .test-container {
+            width: 800px;
+            height: 600px;
+            background: #333;
+            position: relative;
+            display: flex;
+        }
+        
+        .canvas-area {
+            flex: 1;
+            background: white;
+            position: relative;
+            border: 2px solid red; /* Make it obvious when it resizes */
+        }
+        
+        .test-component {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            background: lightblue;
+            border: 2px solid blue;
+            top: 50px;
+            left: 50px;
+        }
+        
+        .resize-handles-container {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+        }
+        
+        .resize-handle {
+            position: absolute;
+            background: #007acc;
+            border: 1px solid #005a99;
+            pointer-events: all;
+            cursor: nw-resize;
+        }
+        
+        .resize-handle.se {
+            width: 8px;
+            height: 8px;
+            bottom: -4px;
+            right: -4px;
+        }
+        
+        .debug-info {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+            font-family: monospace;
+            font-size: 12px;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Canvas Resize Issue</h1>
+    <p>This test simulates the resize issue where canvas-area temporarily resizes.</p>
+    
+    <div class="debug-info" id="debugInfo">
+        <div>Canvas Area: <span id="canvasInfo">Loading...</span></div>
+        <div>Component: <span id="componentInfo">Loading...</span></div>
+        <div>Resize Active: <span id="resizeInfo">No</span></div>
+    </div>
+    
+    <div class="test-container">
+        <div class="canvas-area" id="canvas-area">
+            <div class="test-component" id="test-component" data-component-type="BaseUserContainer">
+                Test Component
+                <div class="resize-handles-container">
+                    <div class="resize-handle se" data-handle="se"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let isResizing = false;
+        let resizeObserver;
+        
+        // Monitor canvas area size changes
+        function updateDebugInfo() {
+            const canvasArea = document.getElementById('canvas-area');
+            const component = document.getElementById('test-component');
+            
+            document.getElementById('canvasInfo').textContent = 
+                `${canvasArea.offsetWidth}x${canvasArea.offsetHeight}`;
+            document.getElementById('componentInfo').textContent = 
+                `${component.offsetWidth}x${component.offsetHeight}`;
+            document.getElementById('resizeInfo').textContent = isResizing ? 'Yes' : 'No';
+        }
+        
+        // Set up resize observer to catch any size changes
+        resizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.target.id === 'canvas-area') {
+                    console.log('🚨 CANVAS AREA RESIZED:', {
+                        width: entry.contentRect.width,
+                        height: entry.contentRect.height,
+                        timestamp: Date.now()
+                    });
+                    updateDebugInfo();
+                }
+            }
+        });
+        
+        const canvasArea = document.getElementById('canvas-area');
+        const component = document.getElementById('test-component');
+        resizeObserver.observe(canvasArea);
+        resizeObserver.observe(component);
+        
+        // Simple resize implementation
+        let startX, startY, startWidth, startHeight;
+        
+        document.querySelector('.resize-handle').addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            isResizing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = component.offsetWidth;
+            startHeight = component.offsetHeight;
+            
+            console.log('🔍 Resize started:', { startWidth, startHeight });
+            updateDebugInfo();
+            
+            function handleMouseMove(e) {
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                
+                const newWidth = startWidth + deltaX;
+                const newHeight = startHeight + deltaY;
+                
+                // Apply resize to component
+                component.style.width = `${newWidth}px`;
+                component.style.height = `${newHeight}px`;
+                
+                updateDebugInfo();
+            }
+            
+            function handleMouseUp(e) {
+                isResizing = false;
+                console.log('🔍 Resize ended');
+                updateDebugInfo();
+                
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            }
+            
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        });
+        
+        // Initial update
+        updateDebugInfo();
+        
+        // Update every 100ms to catch any changes
+        setInterval(updateDebugInfo, 100);
+        
+        console.log('🔍 Debug setup complete. Watch for canvas area size changes during component resize.');
+    </script>
+</body>
+</html>
