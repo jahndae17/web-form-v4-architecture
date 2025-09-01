@@ -176,15 +176,50 @@ class FormBuilderCanvas extends BaseContainer {
                     event.stopPropagation();
                     event.stopImmediatePropagation();
                     
-                    // Additional check: make sure this isn't part of a drag operation
-                    if (!this.isDragInProgress) {
+                    // Check if any movement locks are active before deselecting
+                    const eventHandler = window.toolsApp?.eventHandler;
+                    let hasActiveLocks = false;
+                    
+                    if (eventHandler) {
+                        const lockStatus = eventHandler.getLockStatus();
+                        const activeLocks = Object.keys(lockStatus.active_locks);
+                        
+                        // Check for movement-related locks
+                        hasActiveLocks = activeLocks.some(lockKey => 
+                            lockKey.includes('move_operation') || 
+                            lockKey.includes('resize_operation') ||
+                            lockKey.includes('select_operation')
+                        );
+                    }
+                    
+                    // Additional check: make sure no components are in movement state
+                    let hasMovingComponents = false;
+                    if (window.containerRegistry) {
+                        for (const container of Object.values(window.containerRegistry)) {
+                            if (container.isDragging || container.isResizing || 
+                                container.element?.getAttribute('data-movement-state') === 'moving' ||
+                                container.element?.getAttribute('data-movement-state') === 'ready') {
+                                hasMovingComponents = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Only deselect if no drag operation, no locks, and no movement
+                    if (!this.isDragInProgress && !hasActiveLocks && !hasMovingComponents) {
                         console.log('🎯 Canvas empty area clicked - deselecting all containers');
                         // Make deselection async to prevent timing issues
                         this.deselectAllContainers().catch(error => {
                             console.error('❌ Error during canvas deselection:', error);
                         });
                     } else {
-                        console.log('🚫 Ignoring canvas click during drag operation');
+                        if (this.isDragInProgress) {
+                            console.log('🚫 Ignoring canvas click during drag operation');
+                        } else if (hasActiveLocks) {
+                            console.log('🚫 Ignoring canvas click - active locks detected');
+                        } else if (hasMovingComponents) {
+                            console.log('🚫 Ignoring canvas click - components in movement state');
+                        }
                     }
                 }
             }, true); // Use capture phase to handle before drag/drop events

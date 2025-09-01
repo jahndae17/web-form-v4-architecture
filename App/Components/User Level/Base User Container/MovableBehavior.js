@@ -24,6 +24,7 @@ class MovableBehavior {
         this.currentPosition = null;
         this.movementDelta = { x: 0, y: 0 };
         this.minimumMovementThreshold = 8; // 8px minimum to trigger movement
+        this.lockAcquired = false; // Track lock acquisition status
         
         // Movement constraints
         this.snapToGrid = true;
@@ -72,11 +73,20 @@ class MovableBehavior {
      * Captures initial position and prepares for potential movement
      */
     startMove(parameters) {
+        console.log(`🔍 MovableBehavior Stage 1: startMove called for ${this.componentId}`, parameters);
+        
         // Check if movement is allowed in current mode
         if (!this._isAllowedInCurrentMode()) {
+            console.log(`🔍 MovableBehavior Stage 1a: Movement not allowed in current mode`);
             return { success: false, error: 'Movement not allowed in current mode' };
         }
         
+        console.log(`🔍 MovableBehavior Stage 1b: Mode check passed, skipping lock for now`);
+        // Skip lock for now to avoid blocking - movement will be controlled by threshold
+        // TODO: Implement proper lock management that doesn't self-block
+        this.lockAcquired = false;
+        
+        console.log(`🔍 MovableBehavior Stage 1c: Getting element position and mouse offset`);
         // Get element's current CSS position
         const element = this.component.element;
         const computedStyle = window.getComputedStyle(element);
@@ -102,6 +112,12 @@ class MovableBehavior {
             y: this.mouseStartPosition.y - currentTop
         };
         
+        console.log(`🔍 MovableBehavior Stage 1d: Position data calculated`, {
+            mouseStart: this.mouseStartPosition,
+            elementStart: this.elementStartPosition,
+            offset: this.mouseOffset
+        });
+        
         this.currentPosition = { ...this.mouseStartPosition };
         this.movementDelta = { x: 0, y: 0 };
         this.isMoving = false; // Not moving yet, just tracking
@@ -109,14 +125,16 @@ class MovableBehavior {
         // Update component state
         this.component.isDragging = false; // Will become true if movement threshold exceeded
         
+        console.log(`🔍 MovableBehavior Stage 1e: Creating graphics request`);
         // Create movement preparation graphics request
         const graphics_request = {
             type: 'movement_preparation',
             componentId: this.componentId,
             styles: {
                 cursor: 'grab',
-                userSelect: 'none',
-                pointerEvents: 'none' // Prevent interference during potential movement
+                userSelect: 'none'
+                // Note: NOT setting pointerEvents: 'none' here to maintain interactivity
+                // Only set during actual movement to prevent interference
             },
             classes: {
                 add: ['movement-ready'],
@@ -132,6 +150,7 @@ class MovableBehavior {
             }
         };
         
+        console.log(`🔍 MovableBehavior Stage 1f: Returning success result`);
         return {
             success: true,
             graphics_request,
@@ -154,10 +173,14 @@ class MovableBehavior {
      * Only triggers actual movement if delta exceeds 8px threshold
      */
     performMove(parameters) {
+        console.log(`🔍 MovableBehavior Stage 2: performMove called`, parameters);
+        
         if (!this.mouseStartPosition || !this.elementStartPosition || !this._isAllowedInCurrentMode()) {
+            console.log(`🔍 MovableBehavior Stage 2a: Movement not initialized or not allowed`);
             return { success: false, error: 'Movement not initialized or not allowed' };
         }
         
+        console.log(`🔍 MovableBehavior Stage 2b: Calculating movement delta`);
         // Calculate movement delta from mouse start position
         this.movementDelta = {
             x: parameters.position.x - this.mouseStartPosition.x,
@@ -168,8 +191,15 @@ class MovableBehavior {
             Math.pow(this.movementDelta.x, 2) + Math.pow(this.movementDelta.y, 2)
         );
         
+        console.log(`🔍 MovableBehavior Stage 2c: Delta check`, {
+            delta: this.movementDelta,
+            totalDelta,
+            threshold: this.minimumMovementThreshold
+        });
+        
         // Check if movement threshold exceeded
         if (totalDelta < this.minimumMovementThreshold) {
+            console.log(`🔍 MovableBehavior Stage 2d: Below threshold - potential selection`);
             // Below threshold - prepare for potential selection instead
             return {
                 success: true,
@@ -187,6 +217,7 @@ class MovableBehavior {
             };
         }
         
+        console.log(`🔍 MovableBehavior Stage 2e: Threshold exceeded - beginning movement`);
         // Threshold exceeded - begin actual movement
         if (!this.isMoving) {
             this.isMoving = true;
@@ -198,6 +229,7 @@ class MovableBehavior {
             }
         }
         
+        console.log(`🔍 MovableBehavior Stage 2f: Calculating target position`);
         // Calculate new element position based on movement delta
         let targetPosition = {
             x: this.elementStartPosition.x + this.movementDelta.x,
@@ -221,6 +253,7 @@ class MovableBehavior {
             targetPosition = this._applyBoundaries(targetPosition);
         }
         
+        console.log(`🔍 MovableBehavior Stage 2g: Creating movement graphics request`);
         // Create movement graphics request
         const graphics_request = {
             type: 'active_movement',
@@ -234,7 +267,8 @@ class MovableBehavior {
                 top: `${targetPosition.y}px`,
                 cursor: 'grabbing',
                 zIndex: 1000, // Bring to front during movement
-                opacity: 0.9
+                opacity: 0.9,
+                pointerEvents: 'none' // Now set during actual movement to prevent interference
             },
             classes: {
                 add: ['moving', 'dragging'],
@@ -252,6 +286,7 @@ class MovableBehavior {
             }
         };
         
+        console.log(`🔍 MovableBehavior Stage 2h: Returning movement result`);
         return {
             success: true,
             graphics_request,
@@ -274,7 +309,9 @@ class MovableBehavior {
      * End Movement Operation
      * Finalizes position and cleans up movement state
      */
-    async endMove(parameters) {
+    endMove(parameters) {
+        console.log(`🔍 MovableBehavior Stage 3: endMove called`, parameters);
+        
         const wasMoving = this.isMoving;
         const finalMousePosition = parameters.finalPosition || this.currentPosition;
         
@@ -284,6 +321,32 @@ class MovableBehavior {
             y: finalMousePosition.y - this.mouseOffset.y
         } : null;
         
+        console.log(`🔍 MovableBehavior Stage 3a: Final position calculated`, {
+            wasMoving,
+            finalMousePosition,
+            finalElementPosition
+        });
+        
+        // Only try to release lock if we actually acquired one
+        if (this.lockAcquired) {
+            console.log(`🔍 MovableBehavior Stage 3b: Releasing lock`);
+            const eventHandler = window.toolsApp?.eventHandler;
+            if (eventHandler) {
+                try {
+                    eventHandler.releaseLock(
+                        'move_operation', 
+                        this.componentId, 
+                        'movement_completed'
+                    );
+                    console.log(`🔓 Movement lock released for ${this.componentId}`);
+                } catch (error) {
+                    console.error(`❌ Failed to release movement lock for ${this.componentId}:`, error);
+                }
+            }
+            this.lockAcquired = false;
+        }
+        
+        console.log(`🔍 MovableBehavior Stage 3c: Cleaning up movement state`);
         // Clean up movement state
         this.isMoving = false;
         this.component.isDragging = false;
@@ -295,20 +358,21 @@ class MovableBehavior {
         
         // If we never actually moved (stayed below threshold), allow selection
         if (!wasMoving && this.component.selectableBehavior) {
-            // Trigger selection behavior instead
-            setTimeout(async () => {
-                await this.component.selectableBehavior.selectSingle({ clearOthers: true });
-            }, 0);
+            console.log(`🔍 MovableBehavior Stage 3d: Triggering selection instead of movement`);
+            // Trigger selection behavior synchronously to avoid lock conflicts
+            this.component.selectableBehavior.selectSingle({ clearOthers: true });
             
             return this._resetMovementState();
         }
         
+        console.log(`🔍 MovableBehavior Stage 3e: Applying final position with snapping`);
         // Apply final grid snapping to element position
         let snappedPosition = finalElementPosition;
         if (this.snapToGrid && finalElementPosition) {
             snappedPosition = this._snapToGrid(finalElementPosition);
         }
         
+        console.log(`🔍 MovableBehavior Stage 3f: Creating completion graphics request`);
         // Create movement completion graphics request
         const graphics_request = {
             type: 'movement_completion',
@@ -342,11 +406,13 @@ class MovableBehavior {
             }
         };
         
+        console.log(`🔍 MovableBehavior Stage 3g: Resetting state variables`);
         // Reset state
         this.startPosition = null;
         this.currentPosition = null;
         this.movementDelta = { x: 0, y: 0 };
         
+        console.log(`🔍 MovableBehavior Stage 3h: Returning completion result`);
         return {
             success: true,
             graphics_request,
@@ -369,7 +435,27 @@ class MovableBehavior {
      * Returns component to original position
      */
     cancelMove(parameters) {
+        console.log(`🔍 MovableBehavior Stage 4: cancelMove called`, parameters);
+        
         const originalPosition = this.startPosition;
+        
+        // Only try to release lock if we actually acquired one
+        if (this.lockAcquired) {
+            const eventHandler = window.toolsApp?.eventHandler;
+            if (eventHandler) {
+                try {
+                    eventHandler.releaseLock(
+                        'move_operation', 
+                        this.componentId, 
+                        'movement_cancelled'
+                    );
+                    console.log(`🔓 Movement lock released (cancelled) for ${this.componentId}`);
+                } catch (error) {
+                    console.error(`❌ Failed to release movement lock (cancel) for ${this.componentId}:`, error);
+                }
+            }
+            this.lockAcquired = false;
+        }
         
         // Clean up movement state
         this.isMoving = false;

@@ -836,6 +836,422 @@
             getGraphicsHandler: () => window.toolsApp?.graphicsHandler,
             getEventHandler: () => window.toolsApp?.eventHandler,
             getDragAndDropBehavior: () => window.toolsApp?.dragAndDropBehavior,
+            
+            // Container inspection commands
+            inspectContainer: (containerId) => {
+                if (!containerId) {
+                    console.log('📋 Available containers:');
+                    if (window.containerRegistry) {
+                        for (const [id, container] of Object.entries(window.containerRegistry)) {
+                            console.log(`  - ${id}: ${container.userType} (${container.formRole})`);
+                        }
+                    } else {
+                        console.log('  No containers found in registry');
+                    }
+                    return 'Use inspectContainer("containerId") to inspect a specific container';
+                }
+                
+                const container = window.containerRegistry?.[containerId];
+                if (!container) {
+                    console.error(`❌ Container not found: ${containerId}`);
+                    return null;
+                }
+                
+                const properties = {
+                    // Core Properties
+                    containerId: container.containerId,
+                    userType: container.userType,
+                    formRole: container.formRole,
+                    parent: container.parent?.containerId || null,
+                    
+                    // State Properties
+                    isInitialized: container.isInitialized,
+                    isSelected: container.isSelected,
+                    isHovered: container.isHovered,
+                    isDragging: container.isDragging,
+                    isResizing: container.isResizing,
+                    
+                    // Behavior Properties
+                    isSelectable: container.isSelectable,
+                    isResizeable: container.isResizeable,
+                    isMovable: container.isMovable,
+                    isNestable: container.isNestable,
+                    
+                    // Form Properties
+                    formValue: container.formValue,
+                    formName: container.formName,
+                    isRequired: container.isRequired,
+                    validationRules: container.validationRules,
+                    
+                    // Hierarchy
+                    depth: container.depth,
+                    childrenCount: container.children?.length || 0,
+                    children: container.children?.map(child => child.containerId) || [],
+                    
+                    // Behavior Instances
+                    hasBehaviors: {
+                        selectable: !!container.selectableBehavior,
+                        movable: !!container.movableBehavior,
+                        resizeable: !!container.resizeableBehavior
+                    },
+                    
+                    // Current Mode
+                    currentMode: container.getCurrentMode?.() || 'unknown',
+                    isDesignMode: container.isDesignMode?.() || false,
+                    
+                    // Element Info
+                    hasElement: !!container.element,
+                    elementId: container.element?.id || null,
+                    elementTagName: container.element?.tagName || null,
+                    elementClasses: container.element?.className || null
+                };
+                
+                console.log(`🔍 Container Properties: ${containerId}`);
+                console.table(properties);
+                
+                // Show visual specs if available
+                if (container.visualSpecs) {
+                    console.log('🎨 Visual Specifications:');
+                    console.log(container.visualSpecs);
+                }
+                
+                return properties;
+            },
+            
+            // Get container by clicking on it
+            selectContainer: () => {
+                console.log('👆 Click on any container to inspect it...');
+                const clickHandler = (event) => {
+                    const element = event.target.closest('[data-component-type="BaseUserContainer"]');
+                    if (element) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        
+                        const containerId = element.id;
+                        console.log(`🎯 Selected container: ${containerId}`);
+                        debugTools.inspectContainer(containerId);
+                        
+                        // Remove the click handler after selection
+                        document.removeEventListener('click', clickHandler, true);
+                        console.log('✅ Container selection mode ended');
+                    }
+                };
+                
+                document.addEventListener('click', clickHandler, true);
+                return 'Click on any container to inspect it. Use Escape to cancel.';
+            },
+            
+            // List all containers with their current states
+            listContainers: () => {
+                if (!window.containerRegistry) {
+                    console.log('❌ No container registry found');
+                    return [];
+                }
+                
+                const containers = [];
+                for (const [id, container] of Object.entries(window.containerRegistry)) {
+                    containers.push({
+                        id: id,
+                        type: container.userType,
+                        role: container.formRole,
+                        selected: container.isSelected,
+                        dragging: container.isDragging,
+                        resizing: container.isResizing,
+                        children: container.children?.length || 0,
+                        mode: container.getCurrentMode?.() || 'unknown'
+                    });
+                }
+                
+                console.log('📋 All Containers:');
+                console.table(containers);
+                return containers;
+            },
+            
+            // Lock debugging tools
+            checkLocks: () => {
+                const eventHandler = window.toolsApp?.eventHandler;
+                if (!eventHandler) {
+                    console.error('❌ Event Handler not found');
+                    return null;
+                }
+                
+                const lockStatus = eventHandler.getDetailedLockStatus();
+                
+                console.log('🔒 Lock System Status:');
+                console.log('📊 Summary:', lockStatus.summary);
+                
+                if (lockStatus.activeLocks.length > 0) {
+                    console.log('\n🟢 Active Locks:');
+                    console.table(lockStatus.activeLocks);
+                } else {
+                    console.log('✅ No active locks');
+                }
+                
+                if (lockStatus.queuedLocks.length > 0) {
+                    console.log('\n⏳ Queued Locks:');
+                    console.table(lockStatus.queuedLocks);
+                } else {
+                    console.log('✅ No queued locks');
+                }
+                
+                return lockStatus;
+            },
+            
+            checkComponentLocks: (componentId) => {
+                const eventHandler = window.toolsApp?.eventHandler;
+                if (!eventHandler) {
+                    console.error('❌ Event Handler not found');
+                    return null;
+                }
+                
+                if (!componentId) {
+                    console.log('💡 Usage: debugTools.checkComponentLocks("element_123")');
+                    console.log('💡 Or use "global" for global locks');
+                    return null;
+                }
+                
+                const componentLocks = eventHandler.getComponentLocks(componentId);
+                
+                console.log(`🔒 Locks for Component: ${componentId}`);
+                
+                if (componentLocks.active.length > 0) {
+                    console.log('\n🟢 Active Locks:');
+                    console.table(componentLocks.active);
+                } else {
+                    console.log('✅ No active locks for this component');
+                }
+                
+                if (componentLocks.queued.length > 0) {
+                    console.log('\n⏳ Queued Locks:');
+                    console.table(componentLocks.queued);
+                } else {
+                    console.log('✅ No queued locks for this component');
+                }
+                
+                return componentLocks;
+            },
+            
+            testLockConflict: (lockType, operationId) => {
+                const eventHandler = window.toolsApp?.eventHandler;
+                if (!eventHandler) {
+                    console.error('❌ Event Handler not found');
+                    return null;
+                }
+                
+                if (!lockType || !operationId) {
+                    console.log('💡 Usage: debugTools.testLockConflict("move_operation", "element_123")');
+                    console.log('💡 Lock types: move_operation, resize_operation, select_operation, modal_lock, global_lock');
+                    return null;
+                }
+                
+                const conflictCheck = eventHandler.checkPotentialConflicts(lockType, operationId);
+                
+                console.log(`🔍 Testing Lock: ${lockType}_${operationId}`);
+                
+                if (conflictCheck.canAcquire) {
+                    console.log('✅ Lock can be acquired - no conflicts');
+                } else {
+                    console.log('❌ Lock would conflict with:');
+                    console.table(conflictCheck.conflicts);
+                }
+                
+                return conflictCheck;
+            },
+            
+            releaseLock: (lockType, operationId) => {
+                const eventHandler = window.toolsApp?.eventHandler;
+                if (!eventHandler) {
+                    console.error('❌ Event Handler not found');
+                    return false;
+                }
+                
+                if (!lockType || !operationId) {
+                    console.log('💡 Usage: debugTools.releaseLock("move_operation", "element_123")');
+                    return false;
+                }
+                
+                try {
+                    eventHandler.releaseLock(lockType, operationId, 'manual_debug_release');
+                    console.log(`✅ Released lock: ${lockType}_${operationId}`);
+                    return true;
+                } catch (error) {
+                    console.error(`❌ Failed to release lock: ${error.message}`);
+                    return false;
+                }
+            },
+            
+            emergencyUnlock: () => {
+                const eventHandler = window.toolsApp?.eventHandler;
+                if (!eventHandler) {
+                    console.error('❌ Event Handler not found');
+                    return false;
+                }
+                
+                const lockStatus = eventHandler.getLockStatus();
+                const activeLockCount = Object.keys(lockStatus.active_locks).length;
+                
+                if (activeLockCount === 0) {
+                    console.log('✅ No locks to release');
+                    return true;
+                }
+                
+                console.log(`🚨 Emergency release of ${activeLockCount} active locks`);
+                eventHandler.releaseAllLocks('emergency_debug_unlock');
+                console.log('✅ All locks released');
+                return true;
+            },
+            
+            // Check for problematic CSS properties that could interfere with interactions
+            checkInteractionState: (containerId) => {
+                if (!containerId) {
+                    console.log('💡 Usage: debugTools.checkInteractionState("element_123")');
+                    console.log('💡 Or use debugTools.selectContainer() then call this method');
+                    return null;
+                }
+                
+                const element = document.getElementById(containerId);
+                if (!element) {
+                    console.error(`❌ Element not found: ${containerId}`);
+                    return null;
+                }
+                
+                const computedStyle = window.getComputedStyle(element);
+                const interactionState = {
+                    elementId: containerId,
+                    // Critical interaction properties
+                    pointerEvents: computedStyle.pointerEvents,
+                    userSelect: computedStyle.userSelect,
+                    cursor: computedStyle.cursor,
+                    
+                    // Display and positioning
+                    display: computedStyle.display,
+                    visibility: computedStyle.visibility,
+                    opacity: computedStyle.opacity,
+                    position: computedStyle.position,
+                    zIndex: computedStyle.zIndex,
+                    
+                    // Movement/selection related classes
+                    classes: Array.from(element.classList),
+                    
+                    // Data attributes that could indicate state
+                    movementState: element.getAttribute('data-movement-state'),
+                    selectionState: element.getAttribute('data-selection-state'),
+                    ariaSelected: element.getAttribute('aria-selected'),
+                    
+                    // Check for problematic combinations
+                    issues: []
+                };
+                
+                // Identify potential issues
+                if (interactionState.pointerEvents === 'none') {
+                    interactionState.issues.push('⚠️  pointer-events: none - Element cannot receive mouse events');
+                }
+                
+                if (interactionState.userSelect === 'none' && !interactionState.classes.includes('moving')) {
+                    interactionState.issues.push('⚠️  user-select: none without active movement - May block interactions');
+                }
+                
+                if (interactionState.classes.includes('movement-ready') && interactionState.selectionState === 'selected') {
+                    interactionState.issues.push('❌ Conflicting state: movement-ready + selected');
+                }
+                
+                if (interactionState.visibility === 'hidden' || interactionState.display === 'none') {
+                    interactionState.issues.push('❌ Element is not visible');
+                }
+                
+                if (parseFloat(interactionState.opacity) < 0.1) {
+                    interactionState.issues.push('⚠️  Very low opacity - may be hard to interact with');
+                }
+                
+                console.log(`🔍 Interaction State: ${containerId}`);
+                
+                if (interactionState.issues.length > 0) {
+                    console.log('❌ Issues Found:');
+                    interactionState.issues.forEach(issue => console.log(`  ${issue}`));
+                } else {
+                    console.log('✅ No interaction issues detected');
+                }
+                
+                console.log('\n📊 Full State:');
+                console.table(interactionState);
+                
+                return interactionState;
+            },
+            
+            // Fix common interaction issues
+            fixInteractionState: (containerId) => {
+                if (!containerId) {
+                    console.log('💡 Usage: debugTools.fixInteractionState("element_123")');
+                    return false;
+                }
+                
+                const element = document.getElementById(containerId);
+                if (!element) {
+                    console.error(`❌ Element not found: ${containerId}`);
+                    return false;
+                }
+                
+                console.log(`🔧 Fixing interaction state for: ${containerId}`);
+                
+                // Reset problematic CSS properties
+                element.style.pointerEvents = 'auto';
+                element.style.userSelect = 'auto';
+                element.style.cursor = 'default';
+                
+                // Clean up conflicting classes
+                element.classList.remove('movement-ready', 'movement-idle');
+                
+                // Reset movement state
+                element.removeAttribute('data-movement-state');
+                element.removeAttribute('data-movement-start');
+                
+                console.log('✅ Interaction state fixed');
+                return true;
+            },
+            
+            // Test lock system manually
+            testMovementLock: (containerId) => {
+                if (!containerId) {
+                    console.log('💡 Usage: debugTools.testMovementLock("element_123")');
+                    return false;
+                }
+                
+                const eventHandler = window.toolsApp?.eventHandler;
+                if (!eventHandler) {
+                    console.error('❌ Event Handler not found');
+                    return false;
+                }
+                
+                console.log(`🧪 Testing movement lock for: ${containerId}`);
+                
+                // Request a test lock
+                eventHandler.requestLock('move_operation', containerId, {
+                    priority: 'high',
+                    context: 'debug_test',
+                    reason: 'manual_test'
+                }).then(result => {
+                    if (result.success) {
+                        console.log(`✅ Lock acquired successfully for ${containerId}`);
+                        
+                        // Test conflict detection
+                        console.log('🔍 Testing conflict detection...');
+                        debugTools.testLockConflict('move_operation', containerId);
+                        
+                        // Release after 5 seconds
+                        setTimeout(() => {
+                            eventHandler.releaseLock('move_operation', containerId, 'debug_test_complete');
+                            console.log(`🔓 Test lock released for ${containerId}`);
+                        }, 5000);
+                    } else {
+                        console.error(`❌ Lock denied: ${result.reason}`);
+                    }
+                }).catch(error => {
+                    console.error(`❌ Lock request failed:`, error);
+                });
+                
+                return true;
+            },
+            
             testDrag: (toolId) => {
                 const behavior = window.toolsApp?.dragAndDropBehavior;
                 const tool = window.toolsApp?.toolsContainer?.getTool(toolId);
@@ -853,6 +1269,533 @@
                 localStorage.removeItem('panel-state');
                 console.log('✅ Panel state cache cleared');
                 return 'Cache cleared successfully';
+            },
+
+            // Debug tool to check resize handles alignment
+            debugResizeHandles: function(componentId) {
+                const element = document.getElementById(componentId);
+                if (!element) {
+                    console.log('❌ Element not found:', componentId);
+                    return;
+                }
+                
+                const handlesContainer = element.querySelector('.resize-handles-container');
+                if (!handlesContainer) {
+                    console.log('❌ Resize handles container not found for:', componentId);
+                    return;
+                }
+                
+                const elementRect = element.getBoundingClientRect();
+                const elementStyle = window.getComputedStyle(element);
+                const handlesRect = handlesContainer.getBoundingClientRect();
+                const handlesStyle = window.getComputedStyle(handlesContainer);
+                
+                console.log('🎯 Resize Handles Debug:', {
+                    componentId,
+                    element: {
+                        position: elementStyle.position,
+                        left: elementStyle.left,
+                        top: elementStyle.top,
+                        width: elementStyle.width,
+                        height: elementStyle.height,
+                        boundingRect: elementRect
+                    },
+                    handlesContainer: {
+                        position: handlesStyle.position,
+                        left: handlesStyle.left,
+                        top: handlesStyle.top,
+                        right: handlesStyle.right,
+                        bottom: handlesStyle.bottom,
+                        inset: handlesStyle.inset,
+                        width: handlesStyle.width,
+                        height: handlesStyle.height,
+                        boundingRect: handlesRect
+                    },
+                    alignment: {
+                        leftDiff: handlesRect.left - (elementRect.left - 20),
+                        topDiff: handlesRect.top - (elementRect.top - 20),
+                        widthDiff: handlesRect.width - (elementRect.width + 40),
+                        heightDiff: handlesRect.height - (elementRect.height + 40)
+                    },
+                    parent: {
+                        element: handlesContainer.parentElement?.id,
+                        offsetParent: handlesContainer.offsetParent?.id || 'null'
+                    }
+                });
+                
+                return {
+                    element: elementRect,
+                    handles: handlesRect,
+                    isAligned: Math.abs(handlesRect.left - (elementRect.left - 20)) < 1 && 
+                              Math.abs(handlesRect.top - (elementRect.top - 20)) < 1
+                };
+            },
+
+            // Debug tool to fix resize handles alignment
+            fixResizeHandles: function(componentId) {
+                const element = document.getElementById(componentId);
+                if (!element) {
+                    console.log('❌ Element not found:', componentId);
+                    return;
+                }
+                
+                const handlesContainer = element.querySelector('.resize-handles-container');
+                if (!handlesContainer) {
+                    console.log('❌ Resize handles container not found for:', componentId);
+                    return;
+                }
+                
+                // Force proper positioning
+                element.style.position = 'absolute';
+                handlesContainer.style.cssText = `
+                    position: absolute;
+                    top: -20px;
+                    left: -20px;
+                    right: -20px;
+                    bottom: -20px;
+                    pointer-events: auto;
+                    z-index: 1000;
+                    display: block;
+                `;
+                
+                console.log('✅ Fixed resize handles positioning for:', componentId);
+                return this.debugResizeHandles(componentId);
+            },
+
+            // Debug tool to track what happens during resize
+            trackResize: function(componentId) {
+                const element = document.getElementById(componentId);
+                if (!element) {
+                    console.log('❌ Element not found:', componentId);
+                    return;
+                }
+                
+                // Store original values
+                const originalStyles = {
+                    width: element.style.width,
+                    height: element.style.height,
+                    left: element.style.left,
+                    top: element.style.top
+                };
+                
+                console.log('🔍 Tracking resize for:', componentId);
+                console.log('📏 Original styles:', originalStyles);
+                
+                // Create observer
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                            const newStyles = {
+                                width: element.style.width,
+                                height: element.style.height,
+                                left: element.style.left,
+                                top: element.style.top
+                            };
+                            console.log('📐 Style change detected:', {
+                                old: originalStyles,
+                                new: newStyles,
+                                element: element.id,
+                                timestamp: Date.now()
+                            });
+                        }
+                    });
+                });
+                
+                observer.observe(element, {
+                    attributes: true,
+                    attributeFilter: ['style']
+                });
+                
+                // Stop tracking after 10 seconds
+                setTimeout(() => {
+                    observer.disconnect();
+                    console.log('🛑 Resize tracking stopped for:', componentId);
+                }, 10000);
+                
+                return observer;
+            },
+
+            // Debug tool to check what's being resized
+            checkResizeTarget: function() {
+                const canvasArea = document.getElementById('canvas-area');
+                const containers = document.querySelectorAll('[data-component-type="BaseUserContainer"]');
+                
+                console.log('🎯 Resize Target Analysis:');
+                console.log('Canvas area:', {
+                    id: canvasArea?.id,
+                    width: canvasArea?.style.width,
+                    height: canvasArea?.style.height,
+                    hasResizeHandles: !!canvasArea?.querySelector('.resize-handles-container')
+                });
+                
+                console.log('User containers:', Array.from(containers).map(container => ({
+                    id: container.id,
+                    width: container.style.width,
+                    height: container.style.height,
+                    hasResizeHandles: !!container.querySelector('.resize-handles-container'),
+                    isSelected: container.getAttribute('aria-selected') === 'true'
+                })));
+                
+                return { canvasArea, containers: Array.from(containers) };
+            },
+
+            // Debug tool to clean up improper resize handles
+            cleanupResizeHandles: function() {
+                // Remove resize handles from canvas and other inappropriate elements
+                const inappropriateElements = [
+                    'canvas-area',
+                    'tools-container', 
+                    'app-root'
+                ];
+                
+                let cleaned = 0;
+                inappropriateElements.forEach(elementId => {
+                    const element = document.getElementById(elementId);
+                    if (element) {
+                        const handlesContainer = element.querySelector('.resize-handles-container');
+                        if (handlesContainer) {
+                            handlesContainer.remove();
+                            cleaned++;
+                            console.log(`✅ Removed resize handles from: ${elementId}`);
+                        }
+                    }
+                });
+                
+                // Also remove any handles from elements without data-component-type="BaseUserContainer"
+                const allHandlesContainers = document.querySelectorAll('.resize-handles-container');
+                allHandlesContainers.forEach(handlesContainer => {
+                    const parent = handlesContainer.parentElement;
+                    if (parent && parent.getAttribute('data-component-type') !== 'BaseUserContainer') {
+                        handlesContainer.remove();
+                        cleaned++;
+                        console.log(`✅ Removed resize handles from inappropriate element: ${parent.id || parent.tagName}`);
+                    }
+                });
+                
+                console.log(`🧹 Cleanup complete. Removed ${cleaned} inappropriate resize handle containers.`);
+                return cleaned;
+            },
+
+            // Debug tool to analyze all containers and their states
+            analyzeContainers: function() {
+                console.log('🔍 === CONTAINER ANALYSIS ===');
+                
+                // Get all BaseUserContainers
+                const containers = document.querySelectorAll('[data-component-type="BaseUserContainer"]');
+                const canvasArea = document.getElementById('canvas-area');
+                
+                console.log(`📊 Found ${containers.length} BaseUserContainer(s) and 1 canvas area`);
+                
+                // Analyze canvas area
+                console.log('\n🎨 CANVAS AREA:');
+                console.log({
+                    id: canvasArea?.id,
+                    tagName: canvasArea?.tagName,
+                    position: canvasArea?.style.position,
+                    dimensions: {
+                        width: canvasArea?.style.width || canvasArea?.offsetWidth + 'px',
+                        height: canvasArea?.style.height || canvasArea?.offsetHeight + 'px',
+                        left: canvasArea?.style.left,
+                        top: canvasArea?.style.top
+                    },
+                    hasResizeHandles: !!canvasArea?.querySelector('.resize-handles-container'),
+                    computedStyles: canvasArea ? {
+                        width: getComputedStyle(canvasArea).width,
+                        height: getComputedStyle(canvasArea).height,
+                        position: getComputedStyle(canvasArea).position
+                    } : null
+                });
+                
+                // Analyze each container
+                console.log('\n📦 USER CONTAINERS:');
+                containers.forEach((container, index) => {
+                    const rect = container.getBoundingClientRect();
+                    const computedStyle = getComputedStyle(container);
+                    
+                    console.log(`Container ${index + 1}:`, {
+                        id: container.id,
+                        selected: container.getAttribute('aria-selected') === 'true',
+                        position: container.style.position,
+                        inlineDimensions: {
+                            width: container.style.width,
+                            height: container.style.height,
+                            left: container.style.left,
+                            top: container.style.top
+                        },
+                        computedDimensions: {
+                            width: computedStyle.width,
+                            height: computedStyle.height,
+                            left: computedStyle.left,
+                            top: computedStyle.top
+                        },
+                        boundingRect: {
+                            width: rect.width,
+                            height: rect.height,
+                            left: rect.left,
+                            top: rect.top
+                        },
+                        hasResizeHandles: !!container.querySelector('.resize-handles-container'),
+                        resizeHandlesVisible: container.classList.contains('resize-handles-visible'),
+                        globalRegistry: window.containerRegistry ? !!window.containerRegistry[container.id] : false
+                    });
+                });
+                
+                // Check for resize operations in progress
+                console.log('\n🔄 RESIZE STATE:');
+                const resizingElements = document.querySelectorAll('[data-resize-state="active"]');
+                console.log(`Elements currently resizing: ${resizingElements.length}`);
+                resizingElements.forEach(el => {
+                    console.log(`- ${el.id} (${el.tagName})`);
+                });
+                
+                return {
+                    canvasArea,
+                    containers: Array.from(containers),
+                    resizingElements: Array.from(resizingElements)
+                };
+            },
+
+            // Debug tool to test resize on specific container
+            testContainerResize: function(containerId) {
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.log(`❌ Container not found: ${containerId}`);
+                    return false;
+                }
+                
+                console.log(`🧪 Testing resize for container: ${containerId}`);
+                
+                // Get initial state
+                const initialState = {
+                    inlineWidth: container.style.width,
+                    inlineHeight: container.style.height,
+                    computedWidth: getComputedStyle(container).width,
+                    computedHeight: getComputedStyle(container).height,
+                    boundingWidth: container.getBoundingClientRect().width,
+                    boundingHeight: container.getBoundingClientRect().height
+                };
+                
+                console.log('📏 Initial state:', initialState);
+                
+                // Try direct style change
+                console.log('🔧 Applying test resize...');
+                container.style.width = '300px';
+                container.style.height = '150px';
+                
+                // Force a reflow to ensure styles are applied
+                container.offsetHeight;
+                
+                // Check if change took effect immediately
+                const newState = {
+                    inlineWidth: container.style.width,
+                    inlineHeight: container.style.height,
+                    computedWidth: getComputedStyle(container).width,
+                    computedHeight: getComputedStyle(container).height,
+                    boundingWidth: container.getBoundingClientRect().width,
+                    boundingHeight: container.getBoundingClientRect().height
+                };
+                
+                console.log('📐 New state:', newState);
+                
+                const changed = newState.boundingWidth !== initialState.boundingWidth || 
+                               newState.boundingHeight !== initialState.boundingHeight;
+                
+                console.log(`${changed ? '✅' : '❌'} Visual resize ${changed ? 'successful' : 'failed'}`);
+                
+                // Add visual inspection markers
+                console.log('🔍 VISUAL INSPECTION MARKERS:');
+                console.log('Copy and paste this into console to highlight the container:');
+                console.log(`document.getElementById('${containerId}').style.border = '5px solid red';`);
+                console.log(`document.getElementById('${containerId}').style.backgroundColor = 'yellow';`);
+                console.log('Look at the container now - has it visually changed size?');
+                
+                // Check for CSS overrides
+                const computedStyle = getComputedStyle(container);
+                console.log('🎨 CSS Analysis:', {
+                    position: computedStyle.position,
+                    display: computedStyle.display,
+                    boxSizing: computedStyle.boxSizing,
+                    minWidth: computedStyle.minWidth,
+                    minHeight: computedStyle.minHeight,
+                    maxWidth: computedStyle.maxWidth,
+                    maxHeight: computedStyle.maxHeight,
+                    overflow: computedStyle.overflow,
+                    transform: computedStyle.transform,
+                    zIndex: computedStyle.zIndex
+                });
+                
+                // Wait a moment then revert changes
+                setTimeout(() => {
+                    container.style.width = initialState.inlineWidth;
+                    container.style.height = initialState.inlineHeight;
+                    container.style.border = '';
+                    container.style.backgroundColor = '';
+                    console.log('🔄 Reverted test changes');
+                }, 5000);
+                
+                return changed;
+            },
+
+            // Debug tool to trace resize operations in real-time
+            traceResizeOperations: function(containerId) {
+                const container = document.getElementById(containerId);
+                if (!container) {
+                    console.log(`❌ Container not found: ${containerId}`);
+                    return;
+                }
+                
+                console.log(`🕵️ Starting resize operation tracing for: ${containerId}`);
+                
+                // Override the container's style property setter to log all changes
+                const originalStyleSetters = {};
+                const styleProperties = ['width', 'height', 'left', 'top'];
+                
+                styleProperties.forEach(prop => {
+                    const descriptor = Object.getOwnPropertyDescriptor(container.style, prop) ||
+                                     Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, prop);
+                    
+                    if (descriptor && descriptor.set) {
+                        originalStyleSetters[prop] = descriptor.set;
+                        
+                        Object.defineProperty(container.style, prop, {
+                            set: function(value) {
+                                console.log(`🎯 STYLE CHANGE: ${prop} = "${value}" on ${containerId}`);
+                                console.log(`   Stack trace:`, new Error().stack);
+                                const result = originalStyleSetters[prop].call(this, value);
+                                console.log(`   Visual dimensions after change:`, {
+                                    boundingRect: container.getBoundingClientRect(),
+                                    computedStyle: {
+                                        width: getComputedStyle(container).width,
+                                        height: getComputedStyle(container).height
+                                    }
+                                });
+                                return result;
+                            },
+                            get: descriptor.get,
+                            enumerable: descriptor.enumerable,
+                            configurable: true
+                        });
+                    }
+                });
+                
+                // Also trace resize handle events
+                const resizeHandlesContainer = container.querySelector('.resize-handles-container');
+                if (resizeHandlesContainer) {
+                    const handles = resizeHandlesContainer.querySelectorAll('.resize-handle');
+                    handles.forEach(handle => {
+                        handle.addEventListener('mousedown', (e) => {
+                            console.log(`🎯 RESIZE HANDLE MOUSEDOWN: ${handle.className} on ${containerId}`);
+                            console.log(`   Event target:`, e.target);
+                            console.log(`   Container at mousedown:`, {
+                                style: {
+                                    width: container.style.width,
+                                    height: container.style.height
+                                },
+                                boundingRect: container.getBoundingClientRect()
+                            });
+                        });
+                    });
+                }
+                
+                console.log('🕵️ Resize tracing active. Perform resize operations now.');
+                console.log('Call debugTools.stopResizeTracing() to stop tracing.');
+                
+                // Store cleanup function
+                window._resizeTraceCleanup = () => {
+                    styleProperties.forEach(prop => {
+                        if (originalStyleSetters[prop]) {
+                            Object.defineProperty(container.style, prop, {
+                                set: originalStyleSetters[prop],
+                                get: Object.getOwnPropertyDescriptor(CSSStyleDeclaration.prototype, prop).get,
+                                enumerable: true,
+                                configurable: true
+                            });
+                        }
+                    });
+                    console.log('🛑 Resize tracing stopped and cleanup complete');
+                };
+                
+                return true;
+            },
+
+            // Stop resize tracing
+            stopResizeTracing: function() {
+                if (window._resizeTraceCleanup) {
+                    window._resizeTraceCleanup();
+                    delete window._resizeTraceCleanup;
+                } else {
+                    console.log('❌ No active resize tracing to stop');
+                }
+            },
+
+            // Debug resize handle target detection
+            debugResizeHandleTarget: function(componentId) {
+                const element = document.getElementById(componentId);
+                if (!element) {
+                    console.log('❌ Element not found:', componentId);
+                    return;
+                }
+                
+                const handlesContainer = element.querySelector('.resize-handles-container');
+                if (!handlesContainer) {
+                    console.log('❌ Resize handles container not found for:', componentId);
+                    return;
+                }
+                
+                const handles = handlesContainer.querySelectorAll('.resize-handle');
+                console.log('🔍 Resize Handle Target Debug:', {
+                    componentId,
+                    element: {
+                        id: element.id,
+                        tagName: element.tagName,
+                        classes: element.className,
+                        dataAttributes: element.dataset,
+                        parentElement: element.parentElement?.id || 'none'
+                    },
+                    handlesContainer: {
+                        id: handlesContainer.id,
+                        parentElement: handlesContainer.parentElement?.id,
+                        offsetParent: handlesContainer.offsetParent?.id || 'null'
+                    },
+                    handles: Array.from(handles).map(h => ({
+                        position: h.dataset.resizePosition,
+                        classes: h.className,
+                        parentContainer: h.closest('.resize-handles-container')?.parentElement?.id
+                    })),
+                    containerRegistry: window.containerRegistry?.[componentId] ? 'found' : 'not found',
+                    canvas: {
+                        window_canvas: !!window.canvas,
+                        window_formBuilderCanvas: !!window.formBuilderCanvas,
+                        canvasContainers: window.canvas?.containers?.length || 0,
+                        formBuilderContainers: window.formBuilderCanvas?.containers?.length || 0
+                    }
+                });
+                
+                // Test what the resize handle detection logic would find
+                handles.forEach(handle => {
+                    const position = handle.dataset.resizePosition;
+                    console.log(`🎯 Testing detection for ${position} handle:`);
+                    
+                    // Method 1: Look for resize handles container, then get its parent
+                    const handlesContainer = handle.closest('.resize-handles-container');
+                    if (handlesContainer && handlesContainer.parentElement) {
+                        const container = handlesContainer.parentElement;
+                        console.log(`  Method 1: Found container ${container.id} via handles container`);
+                    }
+                    
+                    // Method 2: Look for any parent with an ID
+                    let container = handle.closest('[id]');
+                    if (container && container.classList.contains('resize-handles-container')) {
+                        container = container.parentElement;
+                    }
+                    console.log(`  Method 2: Found container ${container?.id || 'none'} via closest ID`);
+                    
+                    // Method 3: Look for container with specific patterns
+                    container = handle.closest('[id*="element_"], .base-user-container, [data-container-type]');
+                    console.log(`  Method 3: Found container ${container?.id || 'none'} via pattern matching`);
+                });
+                
+                return { element, handlesContainer, handles: handles.length };
             }
         };
 

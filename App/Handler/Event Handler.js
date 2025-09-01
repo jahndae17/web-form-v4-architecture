@@ -324,14 +324,15 @@ class EventHandler {
      */
     setupConflictRules() {
         // Define which operations conflict with each other
+        // NOTE: With component-specific locks, these conflicts only apply within the same component
         this.conflictRules.set('edit_lock', ['drag_lock', 'resize_lock', 'delete_operation']);
-        this.conflictRules.set('drag_lock', ['edit_lock', 'resize_lock', 'selection_operation']);
-        this.conflictRules.set('resize_lock', ['edit_lock', 'drag_lock', 'move_operation']);
-        this.conflictRules.set('modal_lock', ['*']); // Blocks everything
-        this.conflictRules.set('global_lock', ['*']); // Blocks everything
+        this.conflictRules.set('drag_lock', ['edit_lock', 'resize_lock', 'selection_operation']); // A component can't be moved and resized simultaneously
+        this.conflictRules.set('resize_lock', ['edit_lock', 'drag_lock', 'move_operation']); // A component can't be resized and moved simultaneously
+        this.conflictRules.set('modal_lock', ['*']); // Blocks everything globally
+        this.conflictRules.set('global_lock', ['*']); // Blocks everything globally
         this.conflictRules.set('validation_lock', ['save_operation', 'submit_operation']);
         this.conflictRules.set('save_lock', ['edit_lock', 'validation_lock']);
-        this.conflictRules.set('animation_lock', ['drag_lock', 'resize_lock']);
+        this.conflictRules.set('animation_lock', ['drag_lock', 'resize_lock']); // Conflicts with transform operations on same component
         this.conflictRules.set('async_operation_lock', ['save_lock', 'network_operation']);
     }
     
@@ -370,29 +371,83 @@ class EventHandler {
     }
     
     /**
+     * Extract component ID from operation ID
+     */
+    _extractComponentIdFromOperationId(operationId) {
+        // Extract component ID from operation IDs like:
+        // - "move_operation_element_123"
+        // - "resize_operation_container_456"
+        // - "mouse_drag_element_789"
+        
+        const patterns = [
+            /_([^_]+_[^_]+)$/, // operation_element_123 -> element_123
+            /_([^_]+)$/ // operation_123 -> 123
+        ];
+        
+        for (const pattern of patterns) {
+            const match = operationId.match(pattern);
+            if (match) {
+                return match[1];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Extract component ID from context path for component-specific locks
+     */
+    _extractComponentIdFromPath(contextPath) {
+        // Look for patterns like:
+        // - "components.element_123.is_moving"
+        // - "containers.container_456.is_resizing"
+        // - "current_context_meta.component_element_789.operation"
+        
+        const patterns = [
+            /components\.([^.]+)\./, // components.elementId.property
+            /containers\.([^.]+)\./, // containers.containerId.property
+            /component_([^.]+)\./, // component_elementId.property
+            /element_([^.]+)\./, // element_elementId.property
+            /container_([^.]+)\./ // container_containerId.property
+        ];
+        
+        for (const pattern of patterns) {
+            const match = contextPath.match(pattern);
+            if (match) {
+                return match[1];
+            }
+        }
+        
+        return null;
+    }
+
+    /**
      * Handle operation state changes
      */
     async handleOperationChange(change) {
+        // Extract component ID from the context path for component-specific locks
+        const componentId = this._extractComponentIdFromPath(change.context_path) || 'global';
+        
         if (change.context_path.includes('is_editing') && change.new_value === true) {
-            await this.requestLock('edit_lock', 'edit_operation', { source: change.handler });
+            await this.requestLock('edit_lock', `edit_operation_${componentId}`, { source: change.handler });
         } else if (change.context_path.includes('is_editing') && change.new_value === false) {
-            await this.releaseLock('edit_lock', 'edit_operation');
+            await this.releaseLock('edit_lock', `edit_operation_${componentId}`);
         }
         
         if (change.context_path.includes('is_creating') && change.new_value === true) {
-            await this.requestLock('edit_lock', 'create_operation', { source: change.handler });
+            await this.requestLock('edit_lock', `create_operation_${componentId}`, { source: change.handler });
         }
         
         if (change.context_path.includes('is_moving') && change.new_value === true) {
-            await this.requestLock('drag_lock', 'move_operation', { source: change.handler });
+            await this.requestLock('drag_lock', `move_operation_${componentId}`, { source: change.handler });
         } else if (change.context_path.includes('is_moving') && change.new_value === false) {
-            await this.releaseLock('drag_lock', 'move_operation');
+            await this.releaseLock('drag_lock', `move_operation_${componentId}`);
         }
         
         if (change.context_path.includes('is_resizing') && change.new_value === true) {
-            await this.requestLock('resize_lock', 'resize_operation', { source: change.handler });
+            await this.requestLock('resize_lock', `resize_operation_${componentId}`, { source: change.handler });
         } else if (change.context_path.includes('is_resizing') && change.new_value === false) {
-            await this.releaseLock('resize_lock', 'resize_operation');
+            await this.releaseLock('resize_lock', `resize_operation_${componentId}`);
         }
     }
     
@@ -400,15 +455,18 @@ class EventHandler {
      * Handle drag state changes from mouse input
      */
     async handleDragStateChange(change) {
+        // Extract component ID for component-specific mouse drag locks
+        const componentId = this._extractComponentIdFromPath(change.context_path) || 'mouse';
+        
         if (change.new_value === true) {
             // Dragging started - engage drag lock
-            await this.requestLock('drag_lock', 'mouse_drag', { 
+            await this.requestLock('drag_lock', `mouse_drag_${componentId}`, { 
                 source: change.handler,
                 auto_release: true // Will auto-release when dragging stops
             });
         } else if (change.new_value === false) {
             // Dragging stopped - release drag lock
-            await this.releaseLock('drag_lock', 'mouse_drag');
+            await this.releaseLock('drag_lock', `mouse_drag_${componentId}`);
         }
     }
     
@@ -471,8 +529,8 @@ class EventHandler {
         const lockKey = `${lockType}_${operationId}`;
         const priority = this.lockPriorities[lockType] || 0;
         
-        // Check for conflicts
-        const conflicts = this.checkConflicts(lockType);
+        // Check for conflicts - now component-aware
+        const conflicts = this.checkConflicts(lockType, operationId);
         
         if (conflicts.length > 0) {
             console.log(`EventHandler: Lock request for ${lockKey} conflicts with: ${conflicts.join(', ')}`);
@@ -576,13 +634,33 @@ class EventHandler {
     /**
      * Check for conflicting locks
      */
-    checkConflicts(lockType) {
+    checkConflicts(lockType, operationId) {
         const conflicts = [];
         const conflictRules = this.conflictRules.get(lockType) || [];
         
+        // Extract component ID from the operation ID
+        const componentId = this._extractComponentIdFromOperationId(operationId);
+        
         for (const [lockKey, lockInfo] of this.activeLocks) {
-            if (conflictRules.includes('*') || conflictRules.includes(lockInfo.lockType)) {
+            const lockComponentId = this._extractComponentIdFromOperationId(lockInfo.operationId);
+            
+            // Global locks (modal, global_lock) conflict with everything
+            if (conflictRules.includes('*') || lockInfo.lockType === 'modal_lock' || lockInfo.lockType === 'global_lock') {
                 conflicts.push(lockKey);
+                continue;
+            }
+            
+            // For component-specific locks, only check conflicts within the same component
+            if (componentId && lockComponentId && componentId === lockComponentId) {
+                if (conflictRules.includes(lockInfo.lockType)) {
+                    conflicts.push(lockKey);
+                }
+            }
+            // For operations without component IDs, check all conflicts (legacy behavior)
+            else if (!componentId || !lockComponentId) {
+                if (conflictRules.includes(lockInfo.lockType)) {
+                    conflicts.push(lockKey);
+                }
             }
         }
         
@@ -615,7 +693,7 @@ class EventHandler {
         const remaining = [];
         
         for (const queuedLock of this.lockQueue) {
-            const conflicts = this.checkConflicts(queuedLock.lockType);
+            const conflicts = this.checkConflicts(queuedLock.lockType, queuedLock.operationId);
             
             if (conflicts.length === 0) {
                 processable.push(queuedLock);
@@ -649,6 +727,161 @@ class EventHandler {
             queued_locks: this.lockQueue.length,
             lock_priorities: this.lockPriorities
         };
+    }
+    
+    /**
+     * Get detailed lock information for debugging
+     */
+    getDetailedLockStatus() {
+        const activeLocks = [];
+        const queuedLocks = [];
+        
+        // Process active locks
+        for (const [lockKey, lockInfo] of this.activeLocks) {
+            const [lockType, operationId] = lockKey.split('_', 2);
+            const componentId = this._extractComponentIdFromOperationId(operationId);
+            
+            activeLocks.push({
+                lockKey,
+                lockType,
+                operationId,
+                componentId: componentId || 'global',
+                priority: lockInfo.priority,
+                timestamp: lockInfo.timestamp,
+                context: lockInfo.context,
+                duration: Date.now() - lockInfo.timestamp,
+                blocking: lockInfo.blocking || false,
+                reason: lockInfo.reason || 'operation'
+            });
+        }
+        
+        // Process queued locks
+        this.lockQueue.forEach((queuedLock, index) => {
+            const componentId = this._extractComponentIdFromOperationId(queuedLock.operationId);
+            
+            queuedLocks.push({
+                position: index + 1,
+                lockType: queuedLock.lockType,
+                operationId: queuedLock.operationId,
+                componentId: componentId || 'global',
+                priority: queuedLock.priority,
+                timestamp: queuedLock.timestamp,
+                waitTime: Date.now() - queuedLock.timestamp,
+                context: queuedLock.context,
+                reason: queuedLock.reason || 'queued operation'
+            });
+        });
+        
+        return {
+            summary: {
+                totalActiveLocks: activeLocks.length,
+                totalQueuedLocks: queuedLocks.length,
+                componentsWithLocks: new Set(activeLocks.map(lock => lock.componentId)).size,
+                lockTypes: new Set([...activeLocks.map(lock => lock.lockType), ...queuedLocks.map(lock => lock.lockType)])
+            },
+            activeLocks,
+            queuedLocks,
+            conflictRules: Object.fromEntries(this.conflictRules),
+            lockPriorities: this.lockPriorities
+        };
+    }
+    
+    /**
+     * Get locks for a specific component
+     */
+    getComponentLocks(componentId) {
+        const componentLocks = {
+            active: [],
+            queued: []
+        };
+        
+        // Find active locks for this component
+        for (const [lockKey, lockInfo] of this.activeLocks) {
+            const [lockType, operationId] = lockKey.split('_', 2);
+            const lockComponentId = this._extractComponentIdFromOperationId(operationId);
+            
+            if (lockComponentId === componentId || (!lockComponentId && componentId === 'global')) {
+                componentLocks.active.push({
+                    lockKey,
+                    lockType,
+                    operationId,
+                    priority: lockInfo.priority,
+                    timestamp: lockInfo.timestamp,
+                    duration: Date.now() - lockInfo.timestamp,
+                    context: lockInfo.context
+                });
+            }
+        }
+        
+        // Find queued locks for this component
+        this.lockQueue.forEach((queuedLock, index) => {
+            const lockComponentId = this._extractComponentIdFromOperationId(queuedLock.operationId);
+            
+            if (lockComponentId === componentId || (!lockComponentId && componentId === 'global')) {
+                componentLocks.queued.push({
+                    position: index + 1,
+                    lockType: queuedLock.lockType,
+                    operationId: queuedLock.operationId,
+                    priority: queuedLock.priority,
+                    timestamp: queuedLock.timestamp,
+                    waitTime: Date.now() - queuedLock.timestamp,
+                    context: queuedLock.context
+                });
+            }
+        });
+        
+        return componentLocks;
+    }
+    
+    /**
+     * Check what would conflict with a potential lock
+     */
+    checkPotentialConflicts(lockType, operationId) {
+        const componentId = this._extractComponentIdFromOperationId(operationId);
+        const conflicts = [];
+        
+        for (const [activeLockKey, lockInfo] of this.activeLocks) {
+            const [activeLockType, activeOperationId] = activeLockKey.split('_', 2);
+            const activeComponentId = this._extractComponentIdFromOperationId(activeOperationId);
+            
+            // Check if there would be a conflict
+            if (this._wouldConflict(lockType, componentId, activeLockType, activeComponentId)) {
+                conflicts.push({
+                    conflictingLock: activeLockKey,
+                    conflictingLockType: activeLockType,
+                    conflictingOperationId: activeOperationId,
+                    conflictingComponentId: activeComponentId || 'global',
+                    priority: lockInfo.priority,
+                    duration: Date.now() - lockInfo.timestamp,
+                    reason: 'operation conflict'
+                });
+            }
+        }
+        
+        return {
+            wouldConflict: conflicts.length > 0,
+            conflicts,
+            canAcquire: conflicts.length === 0
+        };
+    }
+    
+    /**
+     * Helper method to check if two locks would conflict
+     */
+    _wouldConflict(lockType1, componentId1, lockType2, componentId2) {
+        // Global locks block everything
+        if (lockType2 === 'modal_lock' || lockType2 === 'global_lock') {
+            return true;
+        }
+        
+        // Different components don't conflict (unless global)
+        if (componentId1 && componentId2 && componentId1 !== componentId2) {
+            return false;
+        }
+        
+        // Check conflict rules
+        const conflictingTypes = this.conflictRules.get(lockType2);
+        return conflictingTypes && (conflictingTypes.includes(lockType1) || conflictingTypes.includes('*'));
     }
     
     /**

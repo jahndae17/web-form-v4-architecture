@@ -132,7 +132,7 @@ class BaseUserContainer {
                         mouseDownPosition = { x: event.clientX, y: event.clientY };
                         isTracking = true;
                         
-                        // Start movement tracking
+                        // Start movement tracking (synchronous now)
                         const result = this.movableBehavior.startMove({
                             position: mouseDownPosition
                         });
@@ -145,6 +145,9 @@ class BaseUserContainer {
                                 console.log('📤 Sending movement start graphics request to Graphics Handler');
                                 this.changeLog.updateContext('current_context_meta.style_updates', result.graphics_request);
                             }
+                        } else {
+                            console.log(`🚫 Movement tracking blocked for ${this.containerId}: ${result.error}`);
+                            isTracking = false; // Reset tracking if lock denied
                         }
                         
                         event.preventDefault(); // Prevent text selection during potential drag
